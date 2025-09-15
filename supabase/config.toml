@@ -1,0 +1,40 @@
+project_id = "epqalebkqmkddlfomnyf"
+
+[functions.create-bulk-users]
+verify_jwt = true
+
+[functions.create-student-user]
+verify_jwt = false
+
+[functions.slack-proxy]
+verify_jwt = false
+
+[functions.email-dispatcher]
+verify_jwt = false
+
+[functions.weekly-summary]
+verify_jwt = false
+
+[functions.inactivity-notify]
+verify_jwt = false
+
+[functions.dropbox-webhook]
+verify_jwt = false
+
+[functions.create-formador-user]
+verify_jwt = false
+
+[functions.reset-user-progress]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = false
+
+[functions.assign-progress]
+verify_jwt = false
+
+[functions.activity]
+verify_jwt = false
+
+[functions.list-users]
+verify_jwt = false
