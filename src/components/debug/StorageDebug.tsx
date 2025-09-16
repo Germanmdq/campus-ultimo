@@ -91,6 +91,36 @@ export function StorageDebug() {
     }
   };
 
+  const checkProfiles = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-profiles`, {
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Profiles check:', data);
+        
+        toast({
+          title: "Profiles check completed",
+          description: `Found ${data.data.totalProfiles} profiles, ${data.data.profilesWithNullNames.length} with null names`
+        });
+      } else {
+        throw new Error('Failed to check profiles');
+      }
+    } catch (error: any) {
+      console.error('Profiles check error:', error);
+      toast({
+        title: "Profiles check failed",
+        description: error.message || "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
@@ -103,6 +133,9 @@ export function StorageDebug() {
           </Button>
           <Button onClick={testUpload} disabled={loading} variant="outline">
             {loading ? 'Testing...' : 'Test Upload'}
+          </Button>
+          <Button onClick={checkProfiles} disabled={loading} variant="outline">
+            {loading ? 'Checking...' : 'Check Profiles'}
           </Button>
         </div>
 
