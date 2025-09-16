@@ -245,6 +245,37 @@ export function StorageDebug() {
     }
   };
 
+  const emergencyFixAuth = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/emergency-fix-auth`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🚨 Emergency auth fix:', data);
+        
+        toast({
+          title: "🚨 EMERGENCY AUTH DIAGNOSTICS COMPLETE",
+          description: "Check console for detailed auth diagnostics.",
+        });
+      } else {
+        throw new Error('Emergency auth fix failed');
+      }
+    } catch (error: any) {
+      console.error('💥 Emergency auth fix error:', error);
+      toast({
+        title: "💥 Emergency auth fix failed",
+        description: error.message || "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
@@ -260,6 +291,9 @@ export function StorageDebug() {
               </Button>
               <Button onClick={emergencyFixStorage} disabled={loading} className="bg-red-600 hover:bg-red-700">
                 {loading ? 'Fixing...' : '🚨 FIX STORAGE NOW'}
+              </Button>
+              <Button onClick={emergencyFixAuth} disabled={loading} className="bg-orange-600 hover:bg-orange-700">
+                {loading ? 'Checking...' : '🔐 CHECK AUTH'}
               </Button>
             </div>
           </div>
