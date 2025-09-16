@@ -183,28 +183,104 @@ export function StorageDebug() {
     }
   };
 
+  const emergencyFixNames = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/emergency-fix-names`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🚨 Emergency names fix:', data);
+        
+        toast({
+          title: "🚨 EMERGENCY FIX COMPLETE",
+          description: `Fixed ${data.data.fixed} user names! Check console for details.`,
+        });
+      } else {
+        throw new Error('Emergency fix failed');
+      }
+    } catch (error: any) {
+      console.error('💥 Emergency names fix error:', error);
+      toast({
+        title: "💥 Emergency fix failed",
+        description: error.message || "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const emergencyFixStorage = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/emergency-fix-storage`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🚨 Emergency storage fix:', data);
+        
+        toast({
+          title: "🚨 EMERGENCY STORAGE FIX COMPLETE",
+          description: "Avatar uploads should now work! Check console for details.",
+        });
+      } else {
+        throw new Error('Emergency storage fix failed');
+      }
+    } catch (error: any) {
+      console.error('💥 Emergency storage fix error:', error);
+      toast({
+        title: "💥 Emergency storage fix failed",
+        description: error.message || "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
         <CardTitle>Storage Debug</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-2 flex-wrap">
-          <Button onClick={checkStorage} disabled={loading}>
-            {loading ? 'Checking...' : 'Setup Storage'}
-          </Button>
-          <Button onClick={fixStoragePolicies} disabled={loading} variant="outline">
-            {loading ? 'Fixing...' : 'Fix Storage Policies'}
-          </Button>
-          <Button onClick={fixUserNames} disabled={loading} variant="outline">
-            {loading ? 'Fixing...' : 'Fix User Names'}
-          </Button>
-          <Button onClick={testUpload} disabled={loading} variant="outline">
-            {loading ? 'Testing...' : 'Test Upload'}
-          </Button>
-          <Button onClick={checkProfiles} disabled={loading} variant="outline">
-            {loading ? 'Checking...' : 'Check Profiles'}
-          </Button>
+        <div className="space-y-4">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <h3 className="font-semibold text-red-800 mb-2">🚨 EMERGENCY FIXES</h3>
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={emergencyFixNames} disabled={loading} className="bg-red-600 hover:bg-red-700">
+                {loading ? 'Fixing...' : '🚨 FIX NAMES NOW'}
+              </Button>
+              <Button onClick={emergencyFixStorage} disabled={loading} className="bg-red-600 hover:bg-red-700">
+                {loading ? 'Fixing...' : '🚨 FIX STORAGE NOW'}
+              </Button>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={checkStorage} disabled={loading}>
+              {loading ? 'Checking...' : 'Setup Storage'}
+            </Button>
+            <Button onClick={fixStoragePolicies} disabled={loading} variant="outline">
+              {loading ? 'Fixing...' : 'Fix Storage Policies'}
+            </Button>
+            <Button onClick={fixUserNames} disabled={loading} variant="outline">
+              {loading ? 'Fixing...' : 'Fix User Names'}
+            </Button>
+            <Button onClick={testUpload} disabled={loading} variant="outline">
+              {loading ? 'Testing...' : 'Test Upload'}
+            </Button>
+            <Button onClick={checkProfiles} disabled={loading} variant="outline">
+              {loading ? 'Checking...' : 'Check Profiles'}
+            </Button>
+          </div>
         </div>
 
         {buckets.length > 0 && (
