@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { useRefreshSession } from "@/hooks/useRefreshSession"
 
 interface AvatarUploadProps {
   value?: string
@@ -23,6 +24,7 @@ export function AvatarUpload({
 }: AvatarUploadProps) {
   const [uploading, setUploading] = React.useState(false)
   const { toast } = useToast()
+  const { refreshSession, checkAndRefreshSession } = useRefreshSession()
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,11 +54,36 @@ export function AvatarUpload({
     setUploading(true)
 
     try {
-      // Generate unique filename without user ID to avoid RLS issues
-      const fileExt = file.name.split('.').pop()
-      const fileName = `avatar-${Date.now()}.${fileExt}`
+      // Check and refresh session if needed
+      const sessionValid = await checkAndRefreshSession()
+      if (!sessionValid) {
+        toast({
+          title: "Error de autenticación",
+          description: "Debes estar logueado para subir una foto. Por favor, inicia sesión nuevamente.",
+          variant: "destructive"
+        })
+        return
+      }
 
-      console.log('Attempting upload to avatars bucket...')
+      // Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError || !user) {
+        console.error('Auth error:', authError)
+        toast({
+          title: "Error de autenticación",
+          description: "No se pudo verificar tu identidad. Por favor, inicia sesión nuevamente.",
+          variant: "destructive"
+        })
+        return
+      }
+
+      console.log('User authenticated:', user.id)
+
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`
+
+      console.log('Attempting upload to avatars bucket...', fileName)
       
       // Try to upload directly to avatars bucket
       const { data, error } = await supabase.storage
@@ -68,6 +95,37 @@ export function AvatarUpload({
 
       if (error) {
         console.error('Upload failed:', error)
+        
+        // If RLS error, try with a simpler filename
+        if (error.message.includes('row-level security')) {
+          console.log('RLS error detected, trying with simpler filename...')
+          const simpleFileName = `avatar-${Date.now()}.${fileExt}`
+          
+          const { data: retryData, error: retryError } = await supabase.storage
+            .from('avatars')
+            .upload(simpleFileName, file, {
+              cacheControl: '3600',
+              upsert: true
+            })
+
+          if (retryError) {
+            throw retryError
+          }
+
+          const { data: urlData } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(simpleFileName)
+
+          console.log('Retry upload successful:', urlData.publicUrl)
+          onChange?.(urlData.publicUrl)
+          
+          toast({
+            title: "Foto actualizada",
+            description: "Tu foto de perfil fue actualizada exitosamente"
+          })
+          return
+        }
+        
         throw error
       }
 
