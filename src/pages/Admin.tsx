@@ -228,9 +228,12 @@ export default function Admin() {
       const { data: enrs } = await supabase.from('enrollments').select('user_id').eq('status', 'active');
       const usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
 
-      // Distinct users in individual courses (active)
-      const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
-      const usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+      // Distinct users in individual courses (active) - Only count if courses exist
+      let usersInIndividual = 0;
+      if (courseCount && courseCount > 0) {
+        const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
+        usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+      }
 
       // New users by period from profiles.created_at
       const now = new Date();

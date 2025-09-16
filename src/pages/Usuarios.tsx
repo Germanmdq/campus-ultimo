@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Search, UserCheck, UserX, Crown, GraduationCap, Loader2, Eye, Filter, X } from 'lucide-react';
+import { Users, Search, UserCheck, UserX, Crown, GraduationCap, Loader2, Eye, Filter, X, Trash2, Edit } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,8 @@ import { useNavigate } from 'react-router-dom';
 import { UserProfileDialog } from '@/components/admin/UserProfileDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useUserSearch } from '@/hooks/useUserSearch';
+import { Autocomplete } from '@/components/ui/autocomplete';
 
 interface User {
   id: string;
@@ -48,6 +50,13 @@ export default function Usuarios() {
   
   // Debounce para optimizar búsquedas
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  
+  // Hook de búsqueda con autocompletado
+  const { 
+    users: searchResults, 
+    loading: searchLoading, 
+    autocompleteOptions 
+  } = useUserSearch({ debounceMs: 300, minSearchLength: 2 });
 
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
   const isAdmin = profile?.role === 'admin';
@@ -173,6 +182,50 @@ export default function Usuarios() {
     });
   };
 
+  const handleDeleteUser = async (userId: string) => {
+    if (!isAdmin) {
+      toast({
+        title: "Sin permisos",
+        description: "Solo los administradores pueden eliminar usuarios",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    if (!confirm(`¿Estás seguro de que quieres eliminar a ${user.name}? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      // Delete from profiles table (this will cascade to other tables)
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setUsers(users.filter(u => u.id !== userId));
+      setTotal(prev => prev - 1);
+
+      toast({
+        title: "Usuario eliminado",
+        description: `${user.name} fue eliminado exitosamente`,
+      });
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar el usuario",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredUsers = users; // ya vienen filtrados/paginados desde el servidor o fallback
 
   const formatDate = (dateString: string) => {
@@ -249,24 +302,15 @@ export default function Usuarios() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre, email, programa o curso..."
+            <div className="flex-1">
+              <Autocomplete
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                onValueChange={setSearchTerm}
+                placeholder="Buscar por nombre, email, programa o curso..."
+                options={autocompleteOptions}
+                loading={searchLoading}
+                className="w-full"
               />
-              {searchTerm && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-                  onClick={() => setSearchTerm('')}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
             </div>
             <Select value={filterRole} onValueChange={setFilterRole}>
               <SelectTrigger className="w-40">
@@ -435,6 +479,32 @@ export default function Usuarios() {
                         </>
                       )}
                     </Button>
+                    
+                    {isAdmin && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUserId(user.id);
+                            setShowUserProfile(true);
+                          }}
+                          className="w-full"
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Editar
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="w-full"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Eliminar
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -524,6 +594,30 @@ export default function Usuarios() {
                         </>
                       )}
                     </Button>
+                    
+                    {isAdmin && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUserId(user.id);
+                            setShowUserProfile(true);
+                          }}
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Editar
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Eliminar
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

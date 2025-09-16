@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2 } from 'lucide-react';
+import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2, Edit, Trash2, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -64,6 +64,8 @@ export default function Comunidad() {
     description: '',
     program_id: ''
   });
+  const [editingForum, setEditingForum] = useState<Forum | null>(null);
+  const [showEditForum, setShowEditForum] = useState(false);
 
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
 
@@ -232,6 +234,89 @@ export default function Comunidad() {
       toast({
         title: "Error",
         description: `No se pudo crear el foro: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditForum = (forum: Forum) => {
+    setEditingForum(forum);
+    setNewForum({
+      name: forum.name,
+      description: forum.description || '',
+      program_id: forum.program_id
+    });
+    setShowEditForum(true);
+  };
+
+  const handleUpdateForum = async () => {
+    if (!editingForum || !newForum.name.trim() || !newForum.program_id) {
+      toast({
+        title: "Error",
+        description: "Por favor completa todos los campos requeridos",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('forums')
+        .update({
+          name: newForum.name.trim(),
+          description: newForum.description.trim() || null,
+          program_id: newForum.program_id
+        })
+        .eq('id', editingForum.id);
+
+      if (error) throw error;
+
+      setEditingForum(null);
+      setNewForum({ name: '', description: '', program_id: '' });
+      setShowEditForum(false);
+      fetchForums();
+      
+      toast({
+        title: "Foro actualizado",
+        description: "El foro fue actualizado exitosamente",
+      });
+    } catch (error: any) {
+      console.error('Error updating forum:', error);
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar el foro",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteForum = async (forumId: string) => {
+    const forum = forums.find(f => f.id === forumId);
+    if (!forum) return;
+
+    if (!confirm(`¿Estás seguro de que quieres eliminar el foro "${forum.name}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('forums')
+        .delete()
+        .eq('id', forumId);
+
+      if (error) throw error;
+
+      fetchForums();
+      
+      toast({
+        title: "Foro eliminado",
+        description: "El foro fue eliminado exitosamente",
+      });
+    } catch (error: any) {
+      console.error('Error deleting forum:', error);
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar el foro",
         variant: "destructive",
       });
     }
@@ -476,9 +561,37 @@ export default function Comunidad() {
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-semibold text-foreground">{forum.name}</h4>
-                        <Badge variant="secondary" className="text-xs">
-                          {forumPosts.length} posts
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {forumPosts.length} posts
+                          </Badge>
+                          {isTeacherOrAdmin && (
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditForum(forum);
+                                }}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteForum(forum.id);
+                                }}
+                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       {forum.description && (
                         <p className="text-sm text-muted-foreground mb-2">{forum.description}</p>
@@ -660,6 +773,62 @@ export default function Comunidad() {
           ))
         )}
       </div>
+
+      {/* Dialog para editar foro */}
+      <Dialog open={showEditForum} onOpenChange={setShowEditForum}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Editar Foro</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-forum-name">Nombre del Foro</Label>
+              <Input
+                id="edit-forum-name"
+                value={newForum.name}
+                onChange={(e) => setNewForum({ ...newForum, name: e.target.value })}
+                placeholder="Nombre del foro"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-forum-description">Descripción (opcional)</Label>
+              <Textarea
+                id="edit-forum-description"
+                value={newForum.description}
+                onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
+                placeholder="Descripción del foro"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-forum-program">Programa</Label>
+              <Select value={newForum.program_id} onValueChange={(value) => setNewForum({ ...newForum, program_id: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un programa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {programs.map(program => (
+                    <SelectItem key={program.id} value={program.id}>
+                      {program.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={handleUpdateForum} className="flex-1">
+                Actualizar Foro
+              </Button>
+              <Button variant="outline" onClick={() => setShowEditForum(false)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

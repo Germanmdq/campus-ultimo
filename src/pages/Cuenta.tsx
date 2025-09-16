@@ -33,8 +33,32 @@ export default function Cuenta() {
   useEffect(() => {
     setName(profile?.full_name || '');
     setAvatarUrl(profile?.avatar_url || '');
+    loadPreferences();
     loadSessions();
   }, [profile?.full_name, profile?.avatar_url]);
+
+  const loadPreferences = async () => {
+    if (!profile?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('preferences')
+        .eq('id', profile.id)
+        .single();
+      
+      if (error) throw error;
+      
+      if (data?.preferences) {
+        setPreferences(prev => ({
+          ...prev,
+          ...data.preferences
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading preferences:', error);
+    }
+  };
 
   const loadSessions = async () => {
     try {
@@ -55,6 +79,20 @@ export default function Cuenta() {
           device: 'Safari en iPhone',
           location: 'Buenos Aires, Argentina',
           lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          current: false
+        },
+        {
+          id: 'tablet',
+          device: 'Safari en iPad',
+          location: 'Buenos Aires, Argentina',
+          lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          current: false
+        },
+        {
+          id: 'work',
+          device: 'Edge en Windows',
+          location: 'Buenos Aires, Argentina',
+          lastActive: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
           current: false
         }
       ]);
