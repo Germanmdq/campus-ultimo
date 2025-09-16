@@ -57,19 +57,34 @@ export function AvatarUpload({
       const fileName = `${name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.${fileExt}`
       const filePath = `avatars/${fileName}`
 
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
+      // Try to upload to 'assets' bucket first, fallback to 'public' if it doesn't exist
+      let bucketName = 'assets'
+      let uploadError = null
+
+      const { error: assetsError } = await supabase.storage
         .from('assets')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
         })
 
+      if (assetsError) {
+        // If assets bucket doesn't exist, try public bucket
+        bucketName = 'public'
+        const { error: publicError } = await supabase.storage
+          .from('public')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          })
+        uploadError = publicError
+      }
+
       if (uploadError) throw uploadError
 
       // Get public URL
       const { data } = supabase.storage
-        .from('assets')
+        .from(bucketName)
         .getPublicUrl(filePath)
 
       onChange?.(data.publicUrl)

@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Plus, Clock, MapPin, Users, Loader2, Bell, BellRing } from 'lucide-react';
+import { Calendar, Plus, Clock, MapPin, Users, Loader2, Bell, BellRing, Edit, Trash2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { CreateEventForm } from '@/components/admin/CreateEventForm';
+import { EditEventForm } from '@/components/admin/EditEventForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useEventNotifications } from '@/hooks/useEventNotifications';
 
@@ -27,6 +28,8 @@ export default function Calendario() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [showEditEvent, setShowEditEvent] = useState(false);
+  const [eventToEdit, setEventToEdit] = useState<Event | null>(null);
   const { notifications, unreadCount, markAsRead } = useEventNotifications();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -88,6 +91,43 @@ export default function Calendario() {
       toast({ title: "Error", description: "No se pudieron cargar los eventos", variant: "destructive" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditEvent = (event: Event) => {
+    setEventToEdit(event);
+    setShowEditEvent(true);
+  };
+
+  const handleEditSuccess = () => {
+    fetchEvents();
+    setShowEditEvent(false);
+    setEventToEdit(null);
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este evento?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', eventId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Evento eliminado",
+        description: "El evento fue eliminado exitosamente"
+      });
+
+      fetchEvents();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar el evento",
+        variant: "destructive"
+      });
     }
   };
 
@@ -223,12 +263,11 @@ export default function Calendario() {
               </div>
             ) : (
               events.slice(0, 5).map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg border bg-surface/50 cursor-pointer"
-                  onClick={() => { setSelectedEvent(event); setDetailsOpen(true); }}>
+                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg border bg-surface/50">
                   <div className="h-10 w-10 rounded-lg bg-accent/20 flex items-center justify-center">
                     <Calendar className="h-4 w-4 text-accent" />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 cursor-pointer" onClick={() => { setSelectedEvent(event); setDetailsOpen(true); }}>
                     <h4 className="font-medium text-sm">{event.title}</h4>
                     {event.description && (
                       <p className="text-xs text-muted-foreground mt-1">{event.description}</p>
@@ -271,6 +310,36 @@ export default function Calendario() {
                       )}
                     </div>
                   </div>
+                  {isTeacherOrAdmin && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-8 p-0"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleEditEvent(event);
+                        }}
+                        title="Editar evento"
+                      >
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDeleteEvent(event.id);
+                        }}
+                        title="Eliminar evento"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -392,6 +461,13 @@ export default function Calendario() {
         open={showCreateEvent} 
         onOpenChange={setShowCreateEvent}
         onSuccess={fetchEvents}
+      />
+
+      <EditEventForm
+        event={eventToEdit}
+        open={showEditEvent}
+        onOpenChange={setShowEditEvent}
+        onSuccess={handleEditSuccess}
       />
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
