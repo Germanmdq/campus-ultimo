@@ -187,26 +187,73 @@ export function StorageDebug() {
   const emergencyFixNames = async () => {
     setLoading(true);
     try {
-      const url = "https://epqalebkqmkddlfomnyf.functions.supabase.co/emergency-fix-names";
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-      });
+      console.log('🔧 Starting emergency names fix directly...');
+      
+      // Get all profiles with missing names
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, created_at')
+        .or('full_name.is.null,full_name.eq.,full_name.eq.Usuario,full_name.eq.Sin nombre');
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('🚨 Emergency names fix:', data);
-        
+      if (profilesError) throw profilesError;
+
+      console.log(`👥 Found ${profiles?.length || 0} profiles needing names`);
+
+      if (!profiles || profiles.length === 0) {
         toast({
-          title: "🚨 EMERGENCY FIX COMPLETE",
-          description: `Fixed ${data.data.fixed} user names! Check console for details.`,
+          title: "✅ No names to fix",
+          description: "All profiles already have names!",
         });
-      } else {
-        throw new Error('Emergency fix failed');
+        return;
       }
+
+      // Get auth users
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      if (authError) throw authError;
+
+      const authUsersMap = new Map(authUsers?.users?.map(u => [u.id, u]) || []);
+      let fixed = 0;
+
+      // Fix names
+      for (const profile of profiles) {
+        const authUser = authUsersMap.get(profile.id);
+        if (!authUser) continue;
+
+        const meta = authUser.user_metadata || {};
+        const email = authUser.email || '';
+        
+        // Try multiple sources for name
+        let newName = meta.full_name || 
+                     meta.name || 
+                     meta.display_name ||
+                     (meta.first_name && meta.last_name ? `${meta.first_name} ${meta.last_name}` : '') ||
+                     (email ? email.split('@')[0] : 'Usuario');
+
+        // Clean up the name
+        newName = newName.trim();
+        if (newName === '' || newName === 'Usuario' || newName === 'Sin nombre') {
+          newName = email ? email.split('@')[0] : 'Usuario';
+        }
+
+        if (newName && newName !== profile.full_name) {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ full_name: newName })
+            .eq('id', profile.id);
+
+          if (!updateError) {
+            fixed++;
+            console.log(`✅ Updated ${profile.id}: "${profile.full_name}" → "${newName}"`);
+          }
+        }
+      }
+
+      console.log(`✅ Emergency names fix completed! Updated ${fixed} profiles`);
+      
+      toast({
+        title: "🚨 EMERGENCY FIX COMPLETE",
+        description: `Fixed ${fixed} user names! Check console for details.`,
+      });
     } catch (error: any) {
       console.error('💥 Emergency names fix error:', error);
       toast({
@@ -222,26 +269,58 @@ export function StorageDebug() {
   const emergencyFixStorage = async () => {
     setLoading(true);
     try {
-      const url = "https://epqalebkqmkddlfomnyf.functions.supabase.co/emergency-fix-storage";
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-      });
+      console.log('🔧 Starting emergency storage fix directly...');
+      
+      // 1. Check existing buckets
+      const { data: existingBuckets, error: listError } = await supabase.storage.listBuckets();
+      if (listError) throw listError;
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('🚨 Emergency storage fix:', data);
-        
-        toast({
-          title: "🚨 EMERGENCY STORAGE FIX COMPLETE",
-          description: "Avatar uploads should now work! Check console for details.",
+      console.log('📦 Existing buckets:', existingBuckets?.map(b => ({ id: b.id, name: b.name, public: b.public })));
+
+      // 2. Create avatars bucket if it doesn't exist
+      let avatarsBucket = existingBuckets?.find(b => b.id === 'avatars');
+      if (!avatarsBucket) {
+        console.log('📦 Creating avatars bucket...');
+        const { error: createError } = await supabase.storage.createBucket('avatars', {
+          public: true,
+          allowedMimeTypes: ['image/*'],
+          fileSizeLimit: 5242880 // 5MB
         });
+        
+        if (createError) {
+          console.error('❌ Error creating avatars bucket:', createError);
+          throw createError;
+        }
+        console.log('✅ Avatars bucket created');
       } else {
-        throw new Error('Emergency storage fix failed');
+        console.log('✅ Avatars bucket already exists');
       }
+
+      // 3. Test upload to verify it works
+      console.log('🧪 Testing upload...');
+      const testContent = 'emergency test file';
+      const testFile = new Blob([testContent], { type: 'text/plain' });
+      
+      const { data: testUpload, error: testError } = await supabase.storage
+        .from('avatars')
+        .upload('emergency-test.txt', testFile);
+
+      if (testError) {
+        console.error('❌ Test upload failed:', testError);
+        throw testError;
+      }
+
+      console.log('✅ Test upload successful:', testUpload);
+
+      // 4. Clean up test file
+      await supabase.storage.from('avatars').remove(['emergency-test.txt']);
+
+      console.log('✅ Emergency storage fix completed!');
+      
+      toast({
+        title: "🚨 EMERGENCY STORAGE FIX COMPLETE",
+        description: "Avatar uploads should now work! Check console for details.",
+      });
     } catch (error: any) {
       console.error('💥 Emergency storage fix error:', error);
       toast({
@@ -257,26 +336,50 @@ export function StorageDebug() {
   const emergencyFixAuth = async () => {
     setLoading(true);
     try {
-      const url = "https://epqalebkqmkddlfomnyf.functions.supabase.co/emergency-fix-auth";
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-      });
+      console.log('🔧 Starting emergency auth diagnostics directly...');
+      
+      // 1. Check current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('🔐 Current session:', { hasSession: !!session, error: sessionError?.message });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('🚨 Emergency auth fix:', data);
+      // 2. Check current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      console.log('👤 Current user:', { hasUser: !!user, userId: user?.id, error: userError?.message });
+
+      // 3. Test database connection
+      const { data: dbTest, error: dbError } = await supabase
+        .from('profiles')
+        .select('count')
+        .limit(1);
+      console.log('🗄️ Database connection:', { success: !dbError, error: dbError?.message });
+
+      // 4. Test storage access
+      const { data: buckets, error: storageError } = await supabase.storage.listBuckets();
+      console.log('📦 Storage access:', { success: !storageError, buckets: buckets?.length || 0, error: storageError?.message });
+
+      // 5. Test storage upload
+      if (!storageError) {
+        const testContent = 'auth test file';
+        const testFile = new Blob([testContent], { type: 'text/plain' });
         
-        toast({
-          title: "🚨 EMERGENCY AUTH DIAGNOSTICS COMPLETE",
-          description: "Check console for detailed auth diagnostics.",
-        });
-      } else {
-        throw new Error('Emergency auth fix failed');
+        const { data: testUpload, error: testUploadError } = await supabase.storage
+          .from('avatars')
+          .upload('auth-test.txt', testFile);
+
+        console.log('🧪 Storage upload test:', { success: !testUploadError, error: testUploadError?.message });
+
+        // Clean up test file
+        if (!testUploadError) {
+          await supabase.storage.from('avatars').remove(['auth-test.txt']);
+        }
       }
+
+      console.log('✅ Emergency auth diagnostics completed');
+      
+      toast({
+        title: "🚨 EMERGENCY AUTH DIAGNOSTICS COMPLETE",
+        description: "Check console for detailed auth diagnostics.",
+      });
     } catch (error: any) {
       console.error('💥 Emergency auth fix error:', error);
       toast({
