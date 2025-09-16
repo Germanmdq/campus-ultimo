@@ -86,12 +86,33 @@ export function AvatarUpload({
 
       console.log('Attempting upload to avatars bucket...', fileName)
       
-      // Ensure avatars bucket exists
-      console.log('Ensuring avatars bucket exists...')
-      const bucketCreated = await ensureAvatarsBucket()
-      if (!bucketCreated) {
-        throw new Error('Failed to create avatars bucket')
-      }
+          // Ensure avatars bucket exists
+          console.log('Ensuring avatars bucket exists...')
+          
+          // First check if bucket exists
+          const { data: buckets, error: listError } = await supabase.storage.listBuckets()
+          if (listError) {
+            console.error('Error listing buckets:', listError)
+            throw listError
+          }
+          
+          const avatarsBucket = buckets?.find(b => b.id === 'avatars')
+          if (!avatarsBucket) {
+            console.log('Avatars bucket not found, creating it...')
+            const { error: createError } = await supabase.storage.createBucket('avatars', {
+              public: true,
+              allowedMimeTypes: ['image/*'],
+              fileSizeLimit: 5242880 // 5MB
+            })
+            
+            if (createError) {
+              console.error('Error creating avatars bucket:', createError)
+              throw createError
+            }
+            console.log('Avatars bucket created successfully')
+          } else {
+            console.log('Avatars bucket already exists')
+          }
 
       // Try to upload directly to avatars bucket
       const { data, error } = await supabase.storage

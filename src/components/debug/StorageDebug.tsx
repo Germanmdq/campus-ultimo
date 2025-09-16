@@ -13,27 +13,8 @@ export function StorageDebug() {
   const checkStorage = async () => {
     setLoading(true);
     try {
-      // First try the setup function
-      const setupResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/setup-storage`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (setupResponse.ok) {
-        const setupData = await setupResponse.json();
-        console.log('Setup response:', setupData);
-        
-        if (setupData.success) {
-          toast({
-            title: "Storage setup completed",
-            description: `Created ${setupData.data.createdBuckets.length} buckets, found ${setupData.data.existingBuckets.length} existing`
-          });
-        }
-      }
-
+      console.log('🔍 Checking storage configuration...');
+      
       // List all buckets
       const { data: bucketsData, error: bucketsError } = await supabase.storage.listBuckets();
       
@@ -41,11 +22,52 @@ export function StorageDebug() {
         throw bucketsError;
       }
 
+      console.log('📦 Available buckets:', bucketsData);
       setBuckets(bucketsData || []);
+
+      // Check if avatars bucket exists
+      const avatarsBucket = bucketsData?.find(b => b.id === 'avatars');
+      
+      if (!avatarsBucket) {
+        console.log('📦 Creating avatars bucket...');
+        const { error: createError } = await supabase.storage.createBucket('avatars', {
+          public: true,
+          allowedMimeTypes: ['image/*'],
+          fileSizeLimit: 5242880 // 5MB
+        });
+        
+        if (createError) {
+          console.error('❌ Error creating avatars bucket:', createError);
+          throw createError;
+        }
+        console.log('✅ Avatars bucket created successfully');
+        
+        // Refresh buckets list
+        const { data: newBucketsData } = await supabase.storage.listBuckets();
+        setBuckets(newBucketsData || []);
+      } else {
+        console.log('✅ Avatars bucket already exists');
+      }
+
+      // Test upload to verify it works
+      console.log('🧪 Testing upload to avatars bucket...');
+      const testFile = new Blob(['test content'], { type: 'text/plain' });
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload('test-file.txt', testFile);
+      
+      if (uploadError) {
+        console.error('❌ Upload test failed:', uploadError);
+        throw uploadError;
+      } else {
+        console.log('✅ Upload test successful:', uploadData);
+        // Clean up test file
+        await supabase.storage.from('avatars').remove(['test-file.txt']);
+      }
       
       toast({
         title: "Storage check completed",
-        description: `Found ${bucketsData?.length || 0} buckets`
+        description: `Found ${bucketsData?.length || 0} buckets. Avatars: ✅ Working!`
       });
 
     } catch (error: any) {
