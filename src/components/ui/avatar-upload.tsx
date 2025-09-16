@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { useRefreshSession } from "@/hooks/useRefreshSession"
+import { ensureAvatarsBucket } from "@/utils/createBucket"
 
 interface AvatarUploadProps {
   value?: string
@@ -85,6 +86,13 @@ export function AvatarUpload({
 
       console.log('Attempting upload to avatars bucket...', fileName)
       
+      // Ensure avatars bucket exists
+      console.log('Ensuring avatars bucket exists...')
+      const bucketCreated = await ensureAvatarsBucket()
+      if (!bucketCreated) {
+        throw new Error('Failed to create avatars bucket')
+      }
+
       // Try to upload directly to avatars bucket
       const { data, error } = await supabase.storage
         .from('avatars')
@@ -97,7 +105,7 @@ export function AvatarUpload({
         console.error('Upload failed:', error)
         
         // If RLS error, try with a simpler filename
-        if (error.message.includes('row-level security')) {
+        if (error.message.includes('row-level security') || error.message.includes('policy')) {
           console.log('RLS error detected, trying with simpler filename...')
           const simpleFileName = `avatar-${Date.now()}.${fileExt}`
           
@@ -109,6 +117,7 @@ export function AvatarUpload({
             })
 
           if (retryError) {
+            console.error('Retry upload failed:', retryError)
             throw retryError
           }
 

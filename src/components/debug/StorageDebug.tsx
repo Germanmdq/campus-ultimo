@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { createAvatarsBucket } from '@/utils/createBucket';
 
 export function StorageDebug() {
   const [buckets, setBuckets] = useState<any[]>([]);
@@ -276,6 +277,33 @@ export function StorageDebug() {
     }
   };
 
+  const createBucketNow = async () => {
+    setLoading(true);
+    try {
+      console.log('🔧 Creating avatars bucket directly...');
+      const result = await createAvatarsBucket();
+      
+      console.log('✅ Bucket creation result:', result);
+      
+      toast({
+        title: "✅ BUCKET CREATED",
+        description: "Avatars bucket created successfully! Try uploading now.",
+      });
+      
+      // Refresh bucket list
+      await checkStorage();
+    } catch (error: any) {
+      console.error('💥 Bucket creation error:', error);
+      toast({
+        title: "💥 Bucket creation failed",
+        description: error.message || "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
@@ -294,6 +322,15 @@ export function StorageDebug() {
               </Button>
               <Button onClick={emergencyFixAuth} disabled={loading} className="bg-orange-600 hover:bg-orange-700">
                 {loading ? 'Checking...' : '🔐 CHECK AUTH'}
+              </Button>
+            </div>
+          </div>
+          
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+            <h3 className="font-semibold text-green-800 mb-2">🔧 QUICK FIXES</h3>
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={createBucketNow} disabled={loading} className="bg-green-600 hover:bg-green-700">
+                {loading ? 'Creating...' : '🔧 CREATE BUCKET NOW'}
               </Button>
             </div>
           </div>
