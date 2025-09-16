@@ -80,20 +80,6 @@ export default function Cuenta() {
           location: 'Buenos Aires, Argentina',
           lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
           current: false
-        },
-        {
-          id: 'tablet',
-          device: 'Safari en iPad',
-          location: 'Buenos Aires, Argentina',
-          lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-          current: false
-        },
-        {
-          id: 'work',
-          device: 'Edge en Windows',
-          location: 'Buenos Aires, Argentina',
-          lastActive: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-          current: false
         }
       ]);
     } catch (error) {
