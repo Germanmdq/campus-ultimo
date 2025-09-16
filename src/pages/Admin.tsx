@@ -433,7 +433,7 @@ export default function Admin() {
           <h1 className="text-3xl font-bold text-foreground">Panel de Administrador</h1>
           <p className="text-muted-foreground">Gestiona todo el Campus de Geometría Sagrada</p>
         </div>
-        <div className="flex gap-2">
+        <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-row'}`}>
           <Button onClick={handleCreateProgram} className="gap-2">
             <Plus className="h-4 w-4" />
             Nuevo Programa

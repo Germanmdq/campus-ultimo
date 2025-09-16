@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2, Edit, Trash2, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -62,7 +63,7 @@ export default function Comunidad() {
   const [newForum, setNewForum] = useState({
     name: '',
     description: '',
-    program_id: ''
+    program_ids: [] as string[]
   });
   const [editingForum, setEditingForum] = useState<Forum | null>(null);
   const [showEditForum, setShowEditForum] = useState(false);
@@ -202,32 +203,35 @@ export default function Comunidad() {
   };
 
   const handleCreateForum = async () => {
-    if (!newForum.name.trim() || !newForum.program_id) {
+    if (!newForum.name.trim() || newForum.program_ids.length === 0) {
       toast({
         title: "Error",
-        description: "Nombre del foro y programa son obligatorios",
+        description: "Nombre del foro y al menos un programa son obligatorios",
         variant: "destructive",
       });
       return;
     }
 
     try {
+      // Crear un foro por cada programa seleccionado
+      const forumsToCreate = newForum.program_ids.map(program_id => ({
+        name: newForum.name.trim(),
+        description: newForum.description.trim() || null,
+        program_id: program_id
+      }));
+
       const { error } = await supabase
         .from('forums')
-        .insert([{
-          name: newForum.name.trim(),
-          description: newForum.description.trim() || null,
-          program_id: newForum.program_id
-        }]);
+        .insert(forumsToCreate);
 
       if (error) throw error;
 
       toast({
         title: "Foro creado",
-        description: `El foro "${newForum.name}" ha sido creado exitosamente`,
+        description: `El foro "${newForum.name}" ha sido creado para ${newForum.program_ids.length} programa(s)`,
       });
 
-      setNewForum({ name: '', description: '', program_id: '' });
+      setNewForum({ name: '', description: '', program_ids: [] });
       setShowCreateForumDialog(false);
       fetchForums();
     } catch (error: any) {
@@ -244,13 +248,13 @@ export default function Comunidad() {
     setNewForum({
       name: forum.name,
       description: forum.description || '',
-      program_id: forum.program_id
+      program_ids: [forum.program_id]
     });
     setShowEditForum(true);
   };
 
   const handleUpdateForum = async () => {
-    if (!editingForum || !newForum.name.trim() || !newForum.program_id) {
+    if (!editingForum || !newForum.name.trim() || newForum.program_ids.length === 0) {
       toast({
         title: "Error",
         description: "Por favor completa todos los campos requeridos",
@@ -265,14 +269,14 @@ export default function Comunidad() {
         .update({
           name: newForum.name.trim(),
           description: newForum.description.trim() || null,
-          program_id: newForum.program_id
+          program_id: newForum.program_ids[0] // Solo el primer programa para edición
         })
         .eq('id', editingForum.id);
 
       if (error) throw error;
 
       setEditingForum(null);
-      setNewForum({ name: '', description: '', program_id: '' });
+      setNewForum({ name: '', description: '', program_ids: [] });
       setShowEditForum(false);
       fetchForums();
       
@@ -423,19 +427,33 @@ export default function Comunidad() {
                 </div>
 
                 <div>
-                  <Label htmlFor="forumProgram">Programa</Label>
-                  <Select value={newForum.program_id} onValueChange={(value) => setNewForum({ ...newForum, program_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar programa" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {programs.map(program => (
-                        <SelectItem key={program.id} value={program.id}>
+                  <Label>Programas</Label>
+                  <div className="space-y-2 mt-2">
+                    {programs.map(program => (
+                      <div key={program.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`create-program-${program.id}`}
+                          checked={newForum.program_ids.includes(program.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setNewForum({
+                                ...newForum,
+                                program_ids: [...newForum.program_ids, program.id]
+                              });
+                            } else {
+                              setNewForum({
+                                ...newForum,
+                                program_ids: newForum.program_ids.filter(id => id !== program.id)
+                              });
+                            }
+                          }}
+                        />
+                        <Label htmlFor={`create-program-${program.id}`} className="text-sm font-normal">
                           {program.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex gap-2">

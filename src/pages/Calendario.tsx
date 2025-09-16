@@ -33,9 +33,32 @@ export default function Calendario() {
   
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
 
+  const cleanupOldEvents = async () => {
+    try {
+      // Delete events that ended yesterday or before
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(23, 59, 59, 999);
+      
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .lt('end_at', yesterday.toISOString());
+      
+      if (error) throw error;
+      
+      console.log('Old events cleaned up successfully');
+    } catch (error) {
+      console.error('Error cleaning up old events:', error);
+    }
+  };
+
   const fetchEvents = async () => {
     setLoading(true);
     try {
+      // Clean up old events first
+      await cleanupOldEvents();
+      
       let dataRes = null as any; let errorRes = null as any;
       try {
         // Ocultar eventos pasados: desde el comienzo del día actual
