@@ -203,6 +203,160 @@ export function StorageDebug() {
     }
   };
 
+  // 🔍 FUNCIÓN DE DEBUG PARA ARREGLAR NOMBRES
+  const debugFixNames = async () => {
+    console.log('🚀 Iniciando debug de nombres...');
+    
+    try {
+      // 1. Ver qué perfiles tenemos
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .limit(10);
+      
+      if (profilesError) {
+        console.error('❌ Error obteniendo profiles:', profilesError);
+        return;
+      }
+
+      console.log('👥 PROFILES ENCONTRADOS:');
+      profiles?.forEach(p => {
+        console.log(`  - ${p.id}: "${p.full_name}"`);
+      });
+
+      // 2. Ver usuarios de auth
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+      if (authError) {
+        console.error('❌ Error obteniendo auth users:', authError);
+        return;
+      }
+
+      console.log('\n🔐 AUTH USERS ENCONTRADOS:');
+      authData.users?.slice(0, 5).forEach(u => {
+        console.log(`  - ${u.id}: ${u.email}`);
+        console.log(`    metadata:`, u.user_metadata);
+        console.log(`    raw_metadata:`, u.raw_user_meta_data);
+        console.log('    ---');
+      });
+
+      // 3. Encontrar perfiles que necesitan nombres
+      const profilesNeedingNames = profiles?.filter(p => 
+        !p.full_name || 
+        p.full_name === '' || 
+        p.full_name === 'Usuario' ||
+        p.full_name === 'Sin nombre'
+      );
+
+      console.log(`\n🎯 PERFILES QUE NECESITAN NOMBRES: ${profilesNeedingNames?.length || 0}`);
+      profilesNeedingNames?.forEach(p => {
+        console.log(`  - ${p.id}: "${p.full_name}"`);
+      });
+
+      // 4. Intentar actualizar uno por uno
+      if (profilesNeedingNames && profilesNeedingNames.length > 0) {
+        console.log('\n🔧 INTENTANDO ACTUALIZAR...');
+        
+        for (const profile of profilesNeedingNames) {
+          const authUser = authData.users?.find(u => u.id === profile.id);
+          if (!authUser) {
+            console.log(`⚠️ No se encontró auth user para ${profile.id}`);
+            continue;
+          }
+
+          // Extraer nombre
+          const metadata = authUser.user_metadata || {};
+          const rawMetadata = authUser.raw_user_meta_data || {};
+          
+          let newName = rawMetadata.full_name || metadata.full_name || authUser.email?.split('@')[0] || 'Usuario';
+          
+          console.log(`🔄 Procesando ${profile.id}:`);
+          console.log(`   Email: ${authUser.email}`);
+          console.log(`   Metadata full_name: ${metadata.full_name}`);
+          console.log(`   Raw metadata full_name: ${rawMetadata.full_name}`);
+          console.log(`   Nombre calculado: "${newName}"`);
+
+          if (newName && newName !== profile.full_name) {
+            console.log(`   🔄 Intentando actualizar...`);
+            
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ full_name: newName })
+              .eq('id', profile.id);
+
+            if (updateError) {
+              console.error(`   ❌ Error actualizando:`, updateError);
+            } else {
+              console.log(`   ✅ Actualizado exitosamente`);
+            }
+          } else {
+            console.log(`   ⏭️ No necesita actualización`);
+          }
+          console.log('   ---');
+        }
+      }
+
+      console.log('🏁 Debug completado');
+
+    } catch (error) {
+      console.error('💥 Error en debug:', error);
+    }
+  };
+
+  // 🔍 FUNCIÓN SIMPLE PARA VER QUÉ HAY EN PROFILES
+  const checkProfiles = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .limit(5);
+      
+    if (error) {
+      console.error('Error:', error);
+      return;
+    }
+    
+    console.log('PROFILES:', data);
+  };
+
+  // 🔍 FUNCIÓN PARA PROBAR UNA ACTUALIZACIÓN SIMPLE
+  const testSimpleUpdate = async () => {
+    try {
+      // Obtener el primer perfil
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .limit(1);
+        
+      if (error || !profiles?.length) {
+        console.error('No se pudieron obtener profiles');
+        return;
+      }
+      
+      const profile = profiles[0];
+      console.log('Profile a actualizar:', profile);
+      
+      // Intentar actualización simple
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ full_name: 'TEST UPDATE' })
+        .eq('id', profile.id);
+        
+      if (updateError) {
+        console.error('Error en update:', updateError);
+      } else {
+        console.log('✅ Update exitoso');
+        
+        // Revertir
+        await supabase
+          .from('profiles')
+          .update({ full_name: profile.full_name })
+          .eq('id', profile.id);
+      }
+      
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
   const copySQLToClipboard = async () => {
     const sqlCommands = `-- 🚀 CONFIGURAR STORAGE DE AVATARES
 -- Ejecuta en Supabase Dashboard → SQL Editor
@@ -282,6 +436,21 @@ FOR DELETE USING (
             </Button>
             <Button onClick={syncEmailsToProfiles} disabled={loading} className="bg-green-600 hover:bg-green-700">
               {loading ? 'Sincronizando...' : '📧 SYNC EMAILS'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+          <h3 className="font-semibold text-purple-800 mb-2">🔍 DEBUG FUNCTIONS</h3>
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={debugFixNames} disabled={loading} className="bg-purple-600 hover:bg-purple-700">
+              🔍 DEBUG NAMES
+            </Button>
+            <Button onClick={checkProfiles} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700">
+              👥 CHECK PROFILES
+            </Button>
+            <Button onClick={testSimpleUpdate} disabled={loading} className="bg-pink-600 hover:bg-pink-700">
+              🧪 TEST UPDATE
             </Button>
           </div>
         </div>
