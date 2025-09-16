@@ -152,6 +152,37 @@ export function StorageDebug() {
     }
   };
 
+  const fixUserNames = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fix-user-names`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('User names fix:', data);
+        
+        toast({
+          title: "User names fixed",
+          description: `Updated ${data.data.updated} user names out of ${data.data.total} profiles`
+        });
+      } else {
+        throw new Error('Failed to fix user names');
+      }
+    } catch (error: any) {
+      console.error('User names fix error:', error);
+      toast({
+        title: "User names fix failed",
+        description: error.message || "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
@@ -164,6 +195,9 @@ export function StorageDebug() {
           </Button>
           <Button onClick={fixStoragePolicies} disabled={loading} variant="outline">
             {loading ? 'Fixing...' : 'Fix Storage Policies'}
+          </Button>
+          <Button onClick={fixUserNames} disabled={loading} variant="outline">
+            {loading ? 'Fixing...' : 'Fix User Names'}
           </Button>
           <Button onClick={testUpload} disabled={loading} variant="outline">
             {loading ? 'Testing...' : 'Test Upload'}

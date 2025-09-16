@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { UserProfileDialog } from '@/components/admin/UserProfileDialog';
+import { EditUserProfileDialog } from '@/components/admin/EditUserProfileDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useUserSearch } from '@/hooks/useUserSearch';
@@ -59,6 +60,10 @@ export default function Usuarios() {
   const [sortBy, setSortBy] = useState<'created_at' | 'name' | 'email'>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Estados para edición de perfil
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<User | null>(null);
   
   // Formulario de inscripción
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
@@ -365,6 +370,17 @@ export default function Usuarios() {
     }
   };
 
+  const handleEditUser = (user: User) => {
+    setUserToEdit(user);
+    setShowEditProfile(true);
+  };
+
+  const handleEditSuccess = () => {
+    setShowEditProfile(false);
+    setUserToEdit(null);
+    fetchUsers(); // Refresh the users list
+  };
+
   const getRoleColor = (role: string) => {
     switch (role.toLowerCase()) {
       case 'admin':
@@ -561,6 +577,13 @@ export default function Usuarios() {
                     </Button>
                     {isAdmin && (
                       <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditUser(user)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -831,6 +854,14 @@ export default function Usuarios() {
         userId={selectedUserId}
         open={showUserProfile}
         onOpenChange={setShowUserProfile}
+      />
+
+      {/* Dialog de edición de perfil */}
+      <EditUserProfileDialog
+        user={userToEdit}
+        open={showEditProfile}
+        onOpenChange={setShowEditProfile}
+        onSuccess={handleEditSuccess}
       />
     </div>
   );
