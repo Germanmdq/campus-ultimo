@@ -586,237 +586,244 @@ export default function Usuarios() {
         </CardContent>
       </Card>
 
-      {/* Formulario de inscripción */}
+      {/* Botón para abrir formulario de inscripción en nueva pantalla */}
       {showEnrollmentForm && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserPlus className="h-5 w-5 text-accent" />
-              Inscribir Usuario
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Selección de usuario */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Buscar usuario existente</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nombre o email..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                    {searchTerm && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
-                        onClick={() => setSearchTerm('')}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {searchLoading && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Buscando usuarios...
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5 text-accent" />
+                Inscribir Usuario
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-6 lg:grid-cols-2">
+                {/* Selección de usuario */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Buscar usuario existente</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar por nombre o email..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                      {searchTerm && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
+                          onClick={() => setSearchTerm('')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
-                  )}
+                    
+                    {searchLoading && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Buscando usuarios...
+                      </div>
+                    )}
 
-                  {searchTerm && searchTerm.length >= 2 && !searchLoading && (
+                    {/* Mostrar todos los usuarios disponibles */}
                     <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {searchResults.length === 0 ? (
+                      {users.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
-                          No se encontraron usuarios
+                          No hay usuarios disponibles
                         </p>
                       ) : (
-                        searchResults.map((user) => (
-                          <div
-                            key={user.id}
-                            className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50"
-                            onClick={() => handleUserSelect(user.id)}
-                          >
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className="text-xs">
-                                {user.name.charAt(0).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{user.name}</p>
-                              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                        users
+                          .filter(user => 
+                            !searchTerm || 
+                            user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            user.email.toLowerCase().includes(searchTerm.toLowerCase())
+                          )
+                          .map((user) => (
+                            <div
+                              key={user.id}
+                              className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50"
+                              onClick={() => handleUserSelect(user.id)}
+                            >
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback className="text-xs">
+                                  {user.name.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{user.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                              </div>
+                              <Badge className={getRoleColor(user.role)}>
+                                {getRoleLabel(user.role)}
+                              </Badge>
                             </div>
-                            <Badge className={getRoleColor(user.role)}>
-                              {getRoleLabel(user.role)}
-                            </Badge>
-                          </div>
-                        ))
+                          ))
                       )}
                     </div>
-                  )}
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">O</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="createNew"
+                        checked={createNewUser}
+                        onCheckedChange={(checked) => setCreateNewUser(checked as boolean)}
+                      />
+                      <Label htmlFor="createNew" className="text-sm font-medium">
+                        Crear nuevo usuario
+                      </Label>
+                    </div>
+
+                    {createNewUser && (
+                      <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                        <div>
+                          <Label htmlFor="newEmail">Email</Label>
+                          <Input
+                            id="newEmail"
+                            type="email"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                            placeholder="usuario@ejemplo.com"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="newName">Nombre completo</Label>
+                          <Input
+                            id="newName"
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                            placeholder="Nombre del usuario"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="newPassword">Contraseña (opcional)</Label>
+                          <Input
+                            id="newPassword"
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Dejar vacío para envío de link mágico"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="newRole">Rol</Label>
+                          <Select value={newRole} onValueChange={(value: any) => setNewRole(value)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="student">Estudiante</SelectItem>
+                              <SelectItem value="formador">Formador</SelectItem>
+                              <SelectItem value="voluntario">Voluntario</SelectItem>
+                              <SelectItem value="admin">Administrador</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
+                {/* Selección de programas y cursos */}
+                <div className="space-y-6">
+                  {/* Programas */}
+                  <div>
+                    <Label className="text-base font-medium">Programas</Label>
+                    <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
+                      {programs.map((program) => (
+                        <div key={program.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`program-${program.id}`}
+                            checked={selectedPrograms.includes(program.id)}
+                            onCheckedChange={() => handleProgramToggle(program.id)}
+                          />
+                          <Label
+                            htmlFor={`program-${program.id}`}
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            {program.title}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">O</span>
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="createNew"
-                      checked={createNewUser}
-                      onCheckedChange={(checked) => setCreateNewUser(checked as boolean)}
-                    />
-                    <Label htmlFor="createNew" className="text-sm font-medium">
-                      Crear nuevo usuario
-                    </Label>
+                  {/* Cursos */}
+                  <div>
+                    <Label className="text-base font-medium">Cursos</Label>
+                    <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
+                      {courses.map((course) => (
+                        <div key={course.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`course-${course.id}`}
+                            checked={selectedCourses.includes(course.id)}
+                            onCheckedChange={() => handleCourseToggle(course.id)}
+                          />
+                          <Label
+                            htmlFor={`course-${course.id}`}
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            {course.title}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  {createNewUser && (
-                    <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-                      <div>
-                        <Label htmlFor="newEmail">Email</Label>
-                        <Input
-                          id="newEmail"
-                          type="email"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          placeholder="usuario@ejemplo.com"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="newName">Nombre completo</Label>
-                        <Input
-                          id="newName"
-                          value={newName}
-                          onChange={(e) => setNewName(e.target.value)}
-                          placeholder="Nombre del usuario"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="newPassword">Contraseña (opcional)</Label>
-                        <Input
-                          id="newPassword"
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="Dejar vacío para envío de link mágico"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="newRole">Rol</Label>
-                        <Select value={newRole} onValueChange={(value: any) => setNewRole(value)}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="student">Estudiante</SelectItem>
-                            <SelectItem value="formador">Formador</SelectItem>
-                            <SelectItem value="voluntario">Voluntario</SelectItem>
-                            <SelectItem value="admin">Administrador</SelectItem>
-                          </SelectContent>
-                        </Select>
+                  {/* Resumen */}
+                  {(selectedPrograms.length > 0 || selectedCourses.length > 0) && (
+                    <div className="p-4 bg-muted/50 rounded-lg">
+                      <h4 className="font-medium text-sm mb-2">Resumen de inscripción:</h4>
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        {selectedPrograms.length > 0 && (
+                          <p>• {selectedPrograms.length} programa(s) seleccionado(s)</p>
+                        )}
+                        {selectedCourses.length > 0 && (
+                          <p>• {selectedCourses.length} curso(s) seleccionado(s)</p>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Selección de programas y cursos */}
-              <div className="space-y-6">
-                {/* Programas */}
-                <div>
-                  <Label className="text-base font-medium">Programas</Label>
-                  <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
-                    {programs.map((program) => (
-                      <div key={program.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`program-${program.id}`}
-                          checked={selectedPrograms.includes(program.id)}
-                          onCheckedChange={() => handleProgramToggle(program.id)}
-                        />
-                        <Label
-                          htmlFor={`program-${program.id}`}
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {program.title}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Cursos */}
-                <div>
-                  <Label className="text-base font-medium">Cursos</Label>
-                  <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
-                    {courses.map((course) => (
-                      <div key={course.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`course-${course.id}`}
-                          checked={selectedCourses.includes(course.id)}
-                          onCheckedChange={() => handleCourseToggle(course.id)}
-                        />
-                        <Label
-                          htmlFor={`course-${course.id}`}
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {course.title}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Resumen */}
-                {(selectedPrograms.length > 0 || selectedCourses.length > 0) && (
-                  <div className="p-4 bg-muted/50 rounded-lg">
-                    <h4 className="font-medium text-sm mb-2">Resumen de inscripción:</h4>
-                    <div className="space-y-1 text-sm text-muted-foreground">
-                      {selectedPrograms.length > 0 && (
-                        <p>• {selectedPrograms.length} programa(s) seleccionado(s)</p>
-                      )}
-                      {selectedCourses.length > 0 && (
-                        <p>• {selectedCourses.length} curso(s) seleccionado(s)</p>
-                      )}
-                    </div>
-                  </div>
-                )}
+              {/* Botones de acción */}
+              <div className="flex justify-end gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowEnrollmentForm(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleEnrollmentSubmit} 
+                  disabled={submitting || (!selectedUser && !createNewUser)}
+                  className="gap-2"
+                >
+                  {submitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  {submitting ? 'Procesando...' : 'Inscribir Usuario'}
+                </Button>
               </div>
-            </div>
-
-            {/* Botones de acción */}
-            <div className="flex justify-end gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowEnrollmentForm(false)}
-              >
-                Cancelar
-              </Button>
-              <Button 
-                onClick={handleEnrollmentSubmit} 
-                disabled={submitting || (!selectedUser && !createNewUser)}
-                className="gap-2"
-              >
-                {submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Check className="h-4 w-4" />
-                )}
-                {submitting ? 'Procesando...' : 'Inscribir Usuario'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Dialog de perfil de usuario */}
