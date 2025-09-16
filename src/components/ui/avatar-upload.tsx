@@ -52,87 +52,35 @@ export function AvatarUpload({
     setUploading(true)
 
     try {
-      // Generate unique filename
+      // Generate unique filename without user ID to avoid RLS issues
       const fileExt = file.name.split('.').pop()
-      const fileName = `${name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.${fileExt}`
-      const filePath = `avatars/${fileName}`
+      const fileName = `avatar-${Date.now()}.${fileExt}`
 
-      // First, try to list buckets to see what's available
-      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
+      console.log('Attempting upload to avatars bucket...')
       
-      if (bucketsError) {
-        console.error('Error listing buckets:', bucketsError)
-        throw new Error('No se pudo acceder al almacenamiento')
-      }
-
-      console.log('Available buckets:', buckets?.map(b => b.name))
-
-      // Try different bucket names in order of preference
-      const bucketNames = ['assets', 'public', 'avatars', 'uploads']
-      let bucketName = null
-      let uploadError = null
-
-      for (const bucket of bucketNames) {
-        const bucketExists = buckets?.some(b => b.name === bucket)
-        if (bucketExists) {
-          console.log(`Trying to upload to bucket: ${bucket}`)
-          const { error } = await supabase.storage
-            .from(bucket)
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              upsert: false
-            })
-          
-          if (!error) {
-            bucketName = bucket
-            break
-          } else {
-            console.error(`Error uploading to ${bucket}:`, error)
-            uploadError = error
-          }
-        }
-      }
-
-      if (!bucketName) {
-        // If no bucket worked, try creating a public bucket
-        console.log('No existing bucket worked, trying to create public bucket')
-        const { error: createError } = await supabase.storage.createBucket('public', {
-          public: true,
-          allowedMimeTypes: ['image/*'],
-          fileSizeLimit: 5242880 // 5MB
+      // Try to upload directly to avatars bucket
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true // Allow overwriting
         })
 
-        if (!createError) {
-          const { error } = await supabase.storage
-            .from('public')
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              upsert: false
-            })
-          
-          if (!error) {
-            bucketName = 'public'
-          } else {
-            uploadError = error
-          }
-        } else {
-          uploadError = createError
-        }
+      if (error) {
+        console.error('Upload failed:', error)
+        throw error
       }
 
-      if (!bucketName || uploadError) {
-        throw uploadError || new Error('No se pudo subir la imagen a ningún bucket disponible')
-      }
+      console.log('Upload successful:', data)
 
       // Get public URL
-      const { data } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(filePath)
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName)
 
-      console.log('Upload successful to bucket:', bucketName)
-      console.log('Public URL:', data.publicUrl)
+      console.log('Public URL:', urlData.publicUrl)
 
-      onChange?.(data.publicUrl)
+      onChange?.(urlData.publicUrl)
       
       toast({
         title: "Foto actualizada",
