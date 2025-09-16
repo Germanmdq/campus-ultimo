@@ -30,6 +30,39 @@ export default function Cuenta() {
     loadSessions();
   }, [profile?.full_name, profile?.avatar_url]);
 
+  const handleAvatarChange = async (newAvatarUrl: string) => {
+    setAvatarUrl(newAvatarUrl);
+    
+    // Guardar en la base de datos
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: newAvatarUrl })
+        .eq('id', user?.id);
+
+      if (error) {
+        console.error('Error saving avatar URL:', error);
+        toast({
+          title: "Error",
+          description: "No se pudo guardar la foto de perfil",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "✅ Foto guardada",
+          description: "Tu foto de perfil se guardó correctamente",
+        });
+      }
+    } catch (error) {
+      console.error('Error saving avatar:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo guardar la foto de perfil",
+        variant: "destructive"
+      });
+    }
+  };
+
   const loadSessions = async () => {
     try {
       const { data, error } = await supabase.auth.getSession();
@@ -137,7 +170,7 @@ export default function Cuenta() {
           <CardContent className="space-y-6">
             <AvatarUpload
               value={avatarUrl}
-              onChange={setAvatarUrl}
+              onChange={handleAvatarChange}
               name={profile?.full_name || profile?.email || 'Usuario'}
               className="mb-4"
             />
