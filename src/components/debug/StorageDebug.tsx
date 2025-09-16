@@ -418,17 +418,59 @@ export function StorageDebug() {
     setLoading(true);
     try {
       console.log('🔧 Creating avatars bucket directly...');
-      const result = await createAvatarsBucket();
       
-      console.log('✅ Bucket creation result:', result);
+      // Check if bucket already exists
+      const { data: existingBuckets, error: listError } = await supabase.storage.listBuckets();
+      if (listError) throw listError;
+      
+      const avatarsBucket = existingBuckets?.find(b => b.id === 'avatars');
+      if (avatarsBucket) {
+        console.log('✅ Avatars bucket already exists');
+        toast({
+          title: "Bucket already exists",
+          description: "Avatars bucket is already available!"
+        });
+        return;
+      }
+      
+      // Create the bucket
+      const { error: createError } = await supabase.storage.createBucket('avatars', {
+        public: true,
+        allowedMimeTypes: ['image/*'],
+        fileSizeLimit: 5242880 // 5MB
+      });
+      
+      if (createError) {
+        console.error('❌ Error creating avatars bucket:', createError);
+        throw createError;
+      }
+      
+      console.log('✅ Avatars bucket created successfully');
+      
+      // Test the bucket by uploading a test file
+      const testFile = new Blob(['test content'], { type: 'text/plain' });
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload('test-bucket-creation.txt', testFile);
+      
+      if (uploadError) {
+        console.error('❌ Test upload failed:', uploadError);
+        throw uploadError;
+      }
+      
+      console.log('✅ Test upload successful:', uploadData);
+      
+      // Clean up test file
+      await supabase.storage.from('avatars').remove(['test-bucket-creation.txt']);
+      
+      // Refresh buckets list
+      const { data: newBucketsData } = await supabase.storage.listBuckets();
+      setBuckets(newBucketsData || []);
       
       toast({
         title: "✅ BUCKET CREATED",
-        description: "Avatars bucket created successfully! Try uploading now.",
+        description: "Avatars bucket created and tested! Avatar uploads should now work."
       });
-      
-      // Refresh bucket list
-      await checkStorage();
     } catch (error: any) {
       console.error('💥 Bucket creation error:', error);
       toast({
