@@ -81,8 +81,11 @@ export default function ProgramDetail() {
         wide_11x6_url: programData.wide_11x6_url || ''
       });
 
-      // Fetch courses in this program
-      const { data: coursesData, error: coursesError } = await supabase
+      // Fetch courses in this program - try both methods
+      let coursesData: any[] = [];
+      
+      // Method 1: Try program_courses table (many-to-many)
+      const { data: programCoursesData, error: programCoursesError } = await supabase
         .from('program_courses')
         .select(`
           courses (
@@ -97,8 +100,34 @@ export default function ProgramDetail() {
         .eq('program_id', programData.id)
         .order('sort_order');
 
-      if (coursesError) throw coursesError;
-      setCourses(coursesData?.map(pc => pc.courses).filter(Boolean) || []);
+      if (!programCoursesError && programCoursesData && programCoursesData.length > 0) {
+        coursesData = programCoursesData.map(pc => pc.courses).filter(Boolean);
+        console.log('Courses loaded via program_courses table:', coursesData.length);
+      } else {
+        // Method 2: Fallback to direct program_id relationship
+        console.log('Trying direct program_id relationship for program:', programData.id);
+        const { data: directCoursesData, error: directCoursesError } = await supabase
+          .from('courses')
+          .select(`
+            id,
+            title,
+            summary,
+            slug,
+            sort_order,
+            published_at
+          `)
+          .eq('program_id', programData.id)
+          .order('sort_order');
+
+        if (directCoursesError) {
+          console.error('Error loading courses via direct relationship:', directCoursesError);
+          throw directCoursesError;
+        }
+        coursesData = directCoursesData || [];
+        console.log('Courses loaded via direct relationship:', coursesData.length);
+      }
+
+      setCourses(coursesData);
       
     } catch (error: any) {
       toast({
