@@ -121,6 +121,37 @@ export function StorageDebug() {
     }
   };
 
+  const fixStoragePolicies = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fix-storage-policies`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Storage policies fix:', data);
+        
+        toast({
+          title: "Storage policies fixed",
+          description: "RLS policies have been updated and buckets ensured"
+        });
+      } else {
+        throw new Error('Failed to fix storage policies');
+      }
+    } catch (error: any) {
+      console.error('Storage policies fix error:', error);
+      toast({
+        title: "Storage policies fix failed",
+        description: error.message || "Unknown error",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
@@ -130,6 +161,9 @@ export function StorageDebug() {
         <div className="flex gap-2 flex-wrap">
           <Button onClick={checkStorage} disabled={loading}>
             {loading ? 'Checking...' : 'Setup Storage'}
+          </Button>
+          <Button onClick={fixStoragePolicies} disabled={loading} variant="outline">
+            {loading ? 'Fixing...' : 'Fix Storage Policies'}
           </Button>
           <Button onClick={testUpload} disabled={loading} variant="outline">
             {loading ? 'Testing...' : 'Test Upload'}
