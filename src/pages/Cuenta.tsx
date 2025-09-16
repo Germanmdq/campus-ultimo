@@ -1,18 +1,16 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { User, Monitor, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Mail, Shield, Moon, Sun, Bell, Lock, Monitor, Smartphone, LogOut } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
-import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserStats } from '@/hooks/useUserStats';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
 
 export default function Cuenta() {
@@ -21,11 +19,6 @@ export default function Cuenta() {
   const { toast } = useToast();
   const { stats } = useUserStats();
   const [name, setName] = useState('');
-  const [preferences, setPreferences] = useState({
-    emailNotifications: true,
-    pushNotifications: false,
-    studyReminders: true,
-  });
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -33,32 +26,8 @@ export default function Cuenta() {
   useEffect(() => {
     setName(profile?.full_name || '');
     setAvatarUrl(profile?.avatar_url || '');
-    loadPreferences();
     loadSessions();
   }, [profile?.full_name, profile?.avatar_url]);
-
-  const loadPreferences = async () => {
-    if (!profile?.id) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('preferences')
-        .eq('id', profile.id)
-        .single();
-      
-      if (error) throw error;
-      
-      if (data?.preferences) {
-        setPreferences(prev => ({
-          ...prev,
-          ...data.preferences
-        }));
-      }
-    } catch (error) {
-      console.error('Error loading preferences:', error);
-    }
-  };
 
   const loadSessions = async () => {
     try {
@@ -87,94 +56,64 @@ export default function Cuenta() {
     }
   };
 
-  const handlePreferenceChange = async (key: string, value: boolean) => {
-    setPreferences(prev => ({ ...prev, [key]: value }));
-    
-    try {
-      // Save to user preferences (you can create a user_preferences table)
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          preferences: { ...preferences, [key]: value }
-        })
-        .eq('id', profile?.id);
-      
-      if (error) throw error;
-      
-      toast({
-        title: 'Preferencia actualizada',
-        description: 'Tu configuración fue guardada.'
-      });
-    } catch (error) {
-      console.error('Error saving preference:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo guardar la preferencia.',
-        variant: 'destructive'
-      });
+  const getRoleColor = (role?: string) => {
+    switch ((role || '').toLowerCase()) {
+      case 'admin':
+      case 'administrador':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      case 'teacher':
+      case 'formador':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+      case 'voluntario':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'student':
+      case 'estudiante':
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
     }
   };
 
-  const handlePasswordChange = async () => {
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: 'newPassword123' // In real app, get from form
-      });
-      
-      if (error) throw error;
-      
-      toast({
-        title: 'Contraseña actualizada',
-        description: 'Tu contraseña fue cambiada exitosamente.'
-      });
-    } catch (error) {
-      console.error('Error changing password:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo cambiar la contraseña.',
-        variant: 'destructive'
-      });
+  const getRoleLabel = (role?: string) => {
+    switch ((role || '').toLowerCase()) {
+      case 'admin':
+      case 'administrador':
+        return 'Administrador';
+      case 'teacher':
+      case 'formador':
+        return 'Formador';
+      case 'voluntario':
+        return 'Voluntario';
+      case 'student':
+      case 'estudiante':
+      default:
+        return 'Estudiante';
     }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const handleSignOutAll = async () => {
     try {
-      await supabase.auth.signOut();
+      await signOut();
       toast({
-        title: 'Sesión cerrada',
-        description: 'Has cerrado sesión exitosamente.'
+        title: "Sesiones cerradas",
+        description: "Todas las sesiones han sido cerradas exitosamente"
       });
     } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
-
-  const getUserInitials = (name: string) => {
-    return name
-      ?.split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2) || 'U';
-  };
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300';
-      case 'teacher': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300';
-      case 'student': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
-
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin': return 'Administrador';
-      case 'teacher': return 'Profesor';
-      case 'formador': return 'Formador';
-      case 'voluntario': return 'Voluntario';
-      case 'student': return 'Estudiante';
-      default: return 'Estudiante';
+      toast({
+        title: "Error",
+        description: "No se pudieron cerrar las sesiones",
+        variant: "destructive"
+      });
     }
   };
 
@@ -253,165 +192,41 @@ export default function Cuenta() {
           </CardContent>
         </Card>
 
-        {/* Configuraciones */}
-        <div className="space-y-6">
-          {/* Preferencias */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-accent" />
-                Preferencias
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                  <Label>Tema {theme === 'dark' ? 'Oscuro' : 'Claro'}</Label>
-                </div>
-                <Button onClick={toggleTheme} variant="outline" size="sm">
-                  Cambiar a {theme === 'dark' ? 'Claro' : 'Oscuro'}
-                </Button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Notificaciones por Email</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Recibir actualizaciones por correo
-                  </p>
-                </div>
-                <Switch 
-                  checked={preferences.emailNotifications}
-                  onCheckedChange={(checked) => handlePreferenceChange('emailNotifications', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Notificaciones Push</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Notificaciones en tiempo real
-                  </p>
-                </div>
-                <Switch 
-                  checked={preferences.pushNotifications}
-                  onCheckedChange={(checked) => handlePreferenceChange('pushNotifications', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Recordatorios de Estudio</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Recordatorios diarios para estudiar
-                  </p>
-                </div>
-                <Switch 
-                  checked={preferences.studyReminders}
-                  onCheckedChange={(checked) => handlePreferenceChange('studyReminders', checked)}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Seguridad */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-accent" />
-                Seguridad
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Cambiar Contraseña</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Actualiza tu contraseña por seguridad
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={handlePasswordChange}>
-                  <Lock className="h-4 w-4 mr-2" />
-                  Cambiar
-                </Button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Autenticación de Dos Factores</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Añade una capa extra de seguridad
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" disabled>
-                  <Shield className="h-4 w-4 mr-2" />
-                  Próximamente
-                </Button>
-              </div>
-
-              <Dialog>
-                <DialogTrigger asChild>
-                  <div className="flex items-center justify-between">
+        {/* Sesiones activas */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Monitor className="h-5 w-5 text-accent" />
+              Sesiones Activas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {sessions.map((session) => (
+                <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <div>
-                      <Label>Sesiones Activas</Label>
+                      <p className="font-medium">{session.device}</p>
+                      <p className="text-sm text-muted-foreground">{session.location}</p>
                       <p className="text-xs text-muted-foreground">
-                        Gestiona tus sesiones abiertas ({sessions.length})
+                        {session.current ? 'Sesión actual' : `Última actividad: ${formatDate(session.lastActive)}`}
                       </p>
                     </div>
+                  </div>
+                  {!session.current && (
                     <Button variant="outline" size="sm">
-                      Ver Sesiones
+                      Cerrar Sesión
                     </Button>
-                  </div>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Sesiones Activas</DialogTitle>
-                    <DialogDescription>
-                      Gestiona las sesiones abiertas en tus dispositivos
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    {sessions.map((session) => (
-                      <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center gap-3">
-                          {session.device.includes('iPhone') || session.device.includes('Android') ? (
-                            <Smartphone className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <Monitor className="h-5 w-5 text-muted-foreground" />
-                          )}
-                          <div>
-                            <p className="font-medium">{session.device}</p>
-                            <p className="text-sm text-muted-foreground">{session.location}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Última actividad: {new Date(session.lastActive).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {session.current && (
-                            <Badge variant="default">Actual</Badge>
-                          )}
-                          {!session.current && (
-                            <Button variant="outline" size="sm">
-                              <LogOut className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex justify-end pt-4">
-                      <Button variant="destructive" onClick={handleSignOutAll}>
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Cerrar Todas las Sesiones
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </CardContent>
-          </Card>
-        </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Solo puedes tener 2 sesiones activas
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Estadísticas del usuario (reales) */}
