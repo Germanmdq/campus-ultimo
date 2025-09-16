@@ -105,6 +105,9 @@ export default function Auth() {
           <p className="text-muted-foreground">
             Accede a tu cuenta para continuar
           </p>
+          <p className="text-sm text-blue-600 font-semibold mt-2">
+            🚀 ESTO ES UNA PRUEBA - COMMIT FUNCIONANDO EN VERCEL 🚀
+          </p>
         </div>
 
         <Card>
