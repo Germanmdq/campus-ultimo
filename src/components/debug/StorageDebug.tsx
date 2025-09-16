@@ -467,44 +467,34 @@ export function StorageDebug() {
   const createBucketNow = async () => {
     setLoading(true);
     try {
-      console.log('🔧 Creating avatars bucket via Edge Function...');
+      console.log('🔧 Attempting to create avatars bucket...');
       
-      // Call Edge Function to create bucket with service_role
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-avatars-bucket`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
+      // Intentar crear bucket directamente (solo funciona con service_role)
+      const { error: createError } = await supabase.storage.createBucket('avatars', {
+        public: true,
+        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+        fileSizeLimit: 5242880 // 5MB
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create bucket');
+      if (createError) {
+        console.warn('⚠️ Cannot create bucket directly:', createError);
+        showManualSetupInstructions();
+        return;
       }
 
-      const data = await response.json();
-      console.log('✅ Bucket creation response:', data);
+      console.log('✅ Bucket created successfully');
       
-      if (data.success) {
-        // Refresh buckets list
-        const { data: newBucketsData } = await supabase.storage.listBuckets();
-        setBuckets(newBucketsData || []);
-        
-        toast({
-          title: "✅ BUCKET CREATED",
-          description: data.message || "Avatars bucket created successfully! Avatar uploads should now work."
-        });
-      } else {
-        throw new Error(data.error || 'Unknown error');
-      }
+      // Refresh buckets list
+      const { data: newBucketsData } = await supabase.storage.listBuckets();
+      setBuckets(newBucketsData || []);
+      
+      toast({
+        title: "✅ BUCKET CREATED",
+        description: "Avatars bucket created successfully! Avatar uploads should now work."
+      });
     } catch (error: any) {
       console.error('💥 Bucket creation error:', error);
-      toast({
-        title: "💥 Bucket creation failed",
-        description: error.message || "Unknown error",
-        variant: "destructive"
-      });
+      showManualSetupInstructions();
     } finally {
       setLoading(false);
     }
@@ -616,6 +606,55 @@ WITH CHECK (
     toast({
       title: "📋 Instrucciones mostradas",
       description: "Revisa la consola para ver los comandos SQL necesarios.",
+    });
+  };
+
+  // 🛠️ CONFIGURACIÓN MANUAL RECOMENDADA
+  const showManualSetupInstructions = () => {
+    const setup = `
+🔧 CONFIGURACIÓN MANUAL RECOMENDADA
+
+=== OPCIÓN 1: Interfaz Web ===
+1. Ve a https://supabase.com/dashboard
+2. Selecciona tu proyecto
+3. Ve a Storage → Buckets
+4. Click "New bucket"
+5. Nombre: avatars
+6. Público: ✅ Habilitado
+7. Límite: 5MB
+8. Tipos permitidos: image/jpeg, image/png, image/webp, image/gif
+
+=== OPCIÓN 2: SQL Editor ===
+1. Ve a SQL Editor en Supabase
+2. Ejecuta:
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'avatars',
+  'avatars',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+ON CONFLICT (id) DO NOTHING;
+
+=== POLÍTICAS RLS (Opcional pero recomendado) ===
+CREATE POLICY "Public read access" ON storage.objects 
+FOR SELECT USING (bucket_id = 'avatars');
+
+CREATE POLICY "Authenticated users can upload" ON storage.objects 
+FOR INSERT WITH CHECK (
+  bucket_id = 'avatars' AND 
+  auth.role() = 'authenticated'
+);
+    `;
+    
+    console.log(setup);
+    
+    toast({
+      title: "🛠️ Configuración manual requerida",
+      description: "Revisa la consola para ver las instrucciones detalladas.",
+      variant: "destructive"
     });
   };
 

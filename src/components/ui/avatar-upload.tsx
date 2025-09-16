@@ -54,59 +54,73 @@ export function AvatarUpload({
     setUploading(true);
 
     try {
+      console.log('🚀 Starting avatar upload...');
+
       // 1. Verificar autenticación
-      const user = await verifyAuthentication();
-      if (!user) return;
-
-      console.log('🔐 User authenticated:', user.id);
-
-      // 2. Intentar upload sin crear bucket (asumiendo que existe)
-      const uploadResult = await attemptDirectUpload(file, user.id);
-      
-      if (uploadResult.success) {
-        // Upload exitoso
-        onChange?.(uploadResult.publicUrl);
+      const sessionValid = await checkAndRefreshSession();
+      if (!sessionValid) {
         toast({
-          title: "✅ Foto actualizada",
-          description: "Tu foto de perfil fue actualizada exitosamente"
+          title: "🔐 Sesión expirada",
+          description: "Inicia sesión nuevamente para subir tu foto",
+          variant: "destructive"
         });
         return;
       }
 
-      // 3. Si falla, mostrar mensaje informativo
-      console.error('❌ Upload failed:', uploadResult.error);
-      
-      // Determinar si es problema de RLS o configuración
-      if (uploadResult.error.includes('row-level security') || 
-          uploadResult.error.includes('policy')) {
-        
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error('🔐 Auth error:', authError);
         toast({
-          title: "⚙️ Configuración requerida",
-          description: "El almacenamiento necesita configuración. Contacta al administrador.",
+          title: "🔐 Error de autenticación",
+          description: "No se pudo verificar tu identidad",
           variant: "destructive"
         });
-        
-        // Log detallado para el administrador
-        console.error('🚨 RLS CONFIGURATION NEEDED:', {
-          error: uploadResult.error,
-          userId: user.id,
-          timestamp: new Date().toISOString(),
-          action: 'Please run the SQL setup commands in Supabase'
-        });
-        
-      } else {
-        toast({
-          title: "❌ Error de upload",
-          description: uploadResult.error || "Error desconocido al subir imagen",
-          variant: "destructive"
-        });
+        return;
       }
 
-    } catch (error: any) {
-      console.error('💥 Unexpected error:', error);
+      console.log('✅ User authenticated:', user.id);
+
+      // 2. Generar nombre de archivo único
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(2, 8);
+      
+      // Usar diferentes estrategias de nombres según el contexto
+      const fileNames = [
+        `${user.id}/avatar-${timestamp}.${fileExt}`,          // Con folder del usuario
+        `avatar-${user.id}-${timestamp}.${fileExt}`,          // Con ID de usuario
+        `avatar-${timestamp}-${randomId}.${fileExt}`,         // Solo timestamp + random
+        `avatars/${user.id}-${timestamp}.${fileExt}`,         // Con subfolder
+        `user-avatar-${Date.now()}.${fileExt}`                // Nombre más simple
+      ];
+
+      console.log('📝 Generated filename options:', fileNames);
+
+      // 3. Intentar upload con diferentes estrategias
+      const uploadResult = await tryMultipleUploadStrategies(file, fileNames);
+      
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error);
+      }
+
+      console.log('✅ Upload successful:', uploadResult.publicUrl);
+
+      // 4. Actualizar UI
+      onChange?.(uploadResult.publicUrl);
+      
       toast({
-        title: "💥 Error inesperado",
-        description: "Algo salió mal. Intenta de nuevo o contacta soporte.",
+        title: "✅ ¡Foto actualizada!",
+        description: "Tu avatar se subió correctamente",
+      });
+
+    } catch (error: any) {
+      console.error('💥 Upload error:', error);
+      
+      // Determinar tipo de error y mostrar mensaje apropiado
+      const errorMessage = getUploadErrorMessage(error);
+      toast({
+        title: "❌ Error al subir foto",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -115,121 +129,161 @@ export function AvatarUpload({
     }
   };
 
-  // 🔐 VERIFICACIÓN DE AUTENTICACIÓN SIMPLIFICADA
-  const verifyAuthentication = async () => {
-    try {
-      const sessionValid = await checkAndRefreshSession();
-      if (!sessionValid) {
-        toast({
-          title: "🔐 Sesión expirada",
-          description: "Inicia sesión nuevamente para subir tu foto",
-          variant: "destructive"
-        });
-        return null;
-      }
+  // 🔄 INTENTAR MÚLTIPLES ESTRATEGIAS DE UPLOAD
+  const tryMultipleUploadStrategies = async (file: File, fileNames: string[]) => {
+    for (let i = 0; i < fileNames.length; i++) {
+      const fileName = fileNames[i];
+      console.log(`📤 Upload attempt ${i + 1}/${fileNames.length}: ${fileName}`);
 
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) {
-        toast({
-          title: "🔐 Error de autenticación",
-          description: "No se pudo verificar tu identidad",
-          variant: "destructive"
-        });
-        return null;
-      }
+      try {
+        // Intentar upload con configuraciones progresivamente más permisivas
+        const uploadConfigs = [
+          {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: file.type
+          },
+          {
+            cacheControl: '3600',
+            upsert: true
+          },
+          {
+            upsert: true
+          },
+          {} // Configuración mínima
+        ];
 
-      return user;
-    } catch (error: any) {
-      console.error('🚨 Auth verification failed:', error);
-      return null;
-    }
-  };
+        for (const config of uploadConfigs) {
+          try {
+            const { data, error } = await supabase.storage
+              .from('avatars')
+              .upload(fileName, file, config);
 
-  // 📤 INTENTO DIRECTO DE UPLOAD (SIN CREAR BUCKET)
-  const attemptDirectUpload = async (file: File, userId: string) => {
-    try {
-      // Generar nombre de archivo
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const timestamp = Date.now();
-      const fileName = `avatar-${userId}-${timestamp}.${fileExt}`;
+            if (error) {
+              console.warn(`⚠️ Config failed for ${fileName}:`, error.message);
+              continue;
+            }
 
-      console.log('📤 Attempting direct upload:', fileName);
+            // Si llegamos aquí, el upload fue exitoso
+            const { data: urlData } = supabase.storage
+              .from('avatars')
+              .getPublicUrl(fileName);
 
-      // Intentar upload directo
-      const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: file.type
-        });
-
-      if (error) {
-        console.error('❌ Direct upload failed:', error);
-        
-        // Si es error de RLS, intentar con nombre más simple
-        if (error.message.includes('row-level security') || 
-            error.message.includes('policy')) {
-          
-          console.log('🔄 Trying simplified filename due to RLS...');
-          const simpleFileName = `avatar-${timestamp}.${fileExt}`;
-          
-          const { data: retryData, error: retryError } = await supabase.storage
-            .from('avatars')
-            .upload(simpleFileName, file, {
-              cacheControl: '3600',
-              upsert: true,
-              contentType: file.type
-            });
-
-          if (retryError) {
-            return { 
-              success: false, 
-              error: `RLS Error: ${retryError.message}` 
+            console.log(`✅ Upload successful with config:`, config);
+            return {
+              success: true,
+              publicUrl: urlData.publicUrl,
+              fileName,
+              config
             };
+
+          } catch (configError: any) {
+            console.warn(`⚠️ Config error:`, configError.message);
+            continue;
           }
-
-          // Obtener URL pública del archivo con nombre simple
-          const { data: urlData } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(simpleFileName);
-
-          console.log('✅ Simplified upload successful:', urlData.publicUrl);
-          return { 
-            success: true, 
-            publicUrl: urlData.publicUrl,
-            fileName: simpleFileName 
-          };
         }
+
+      } catch (fileError: any) {
+        console.warn(`⚠️ Filename ${fileName} failed:`, fileError.message);
         
-        return { success: false, error: error.message };
+        // Si es el último nombre y aún falla, verificar si es problema de bucket
+        if (i === fileNames.length - 1) {
+          if (fileError.message?.includes('bucket') || 
+              fileError.message?.includes('not found')) {
+            return await handleMissingBucket(file);
+          }
+        }
+        continue;
       }
-
-      // Upload exitoso con nombre original
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      console.log('✅ Direct upload successful:', urlData.publicUrl);
-      return { 
-        success: true, 
-        publicUrl: urlData.publicUrl,
-        fileName 
-      };
-
-    } catch (error: any) {
-      console.error('💥 Upload attempt failed:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Unknown upload error' 
-      };
     }
+
+    return {
+      success: false,
+      error: 'Todos los intentos de upload fallaron. Verifica la configuración del almacenamiento.'
+    };
   };
 
-  // 🧹 LIMPIEZA DEL INPUT
+  // 🪣 MANEJAR BUCKET FALTANTE
+  const handleMissingBucket = async (file: File) => {
+    console.log('🪣 Bucket not found, showing setup instructions...');
+    
+    // Mostrar instrucciones específicas para crear el bucket manualmente
+    const setupMessage = `
+⚙️ CONFIGURACIÓN NECESARIA:
+
+El bucket 'avatars' no existe. Para solucionarlo:
+
+1. Ve a tu proyecto Supabase
+2. Ve a Storage → Buckets  
+3. Crea un nuevo bucket llamado 'avatars'
+4. Configuración recomendada:
+   • Público: ✅ Sí
+   • Límite de archivo: 5MB
+   • Tipos MIME: image/jpeg, image/png, image/webp, image/gif
+
+Alternativamente, ejecuta este SQL en el SQL Editor:
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'avatars',
+  'avatars',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+ON CONFLICT (id) DO NOTHING;
+    `;
+
+    console.log(setupMessage);
+
+    return {
+      success: false,
+      error: 'Bucket de avatares no encontrado. Verifica la configuración del almacenamiento.',
+      setupRequired: true
+    };
+  };
+
+  // 📋 OBTENER MENSAJE DE ERROR APROPIADO
+  const getUploadErrorMessage = (error: any): string => {
+    const message = error.message?.toLowerCase() || '';
+    
+    if (message.includes('cors') || message.includes('origin')) {
+      return '🌐 Error de CORS. No se necesitan funciones serverless para subir avatares.';
+    }
+    
+    if (message.includes('bucket') || message.includes('not found')) {
+      return '🪣 Bucket no encontrado. Crea el bucket "avatars" en Supabase Storage.';
+    }
+    
+    if (message.includes('row-level security') || message.includes('policy')) {
+      return '🔒 Error de permisos RLS. Configura las políticas de storage.';
+    }
+    
+    if (message.includes('file size') || message.includes('payload too large')) {
+      return '📏 Archivo demasiado grande. Reduce el tamaño de la imagen.';
+    }
+    
+    if (message.includes('authentication') || message.includes('unauthorized')) {
+      return '🔐 Error de autenticación. Inicia sesión nuevamente.';
+    }
+    
+    if (message.includes('network') || message.includes('fetch')) {
+      return '🌐 Error de conexión. Verifica tu internet.';
+    }
+    
+    if (message.includes('timeout')) {
+      return '⏱️ Tiempo de espera agotado. Intenta con una imagen más pequeña.';
+    }
+    
+    // Error genérico con mensaje original para debugging
+    return `💥 ${error.message || 'Error desconocido al subir la imagen'}`;
+  };
+
+  // 🧹 LIMPIAR INPUT DE ARCHIVO
   const resetFileInput = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+      console.log('🧹 File input reset');
     }
   };
 
