@@ -287,12 +287,12 @@ export default function Usuarios() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className={`${isMobile ? 'space-y-4' : 'flex items-center justify-between'}`}>
         <div>
           <h1 className="text-3xl font-bold text-foreground">Usuarios</h1>
           <p className="text-muted-foreground">Gestiona los usuarios y sus inscripciones</p>
         </div>
-        <Button className="gap-2" onClick={() => navigate('/inscribir-usuario')}>
+        <Button className={`gap-2 ${isMobile ? 'w-full' : ''}`} onClick={() => navigate('/inscribir-usuario')}>
           <Users className="h-4 w-4" />
           Inscribir Usuario
         </Button>
