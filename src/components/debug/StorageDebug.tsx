@@ -510,6 +510,115 @@ export function StorageDebug() {
     }
   };
 
+  // 🔧 FUNCIÓN DE DIAGNÓSTICO PARA ADMINISTRADORES
+  const diagnoseStorageSetup = async () => {
+    setLoading(true);
+    try {
+      console.log('🔍 Running storage setup diagnosis...');
+      
+      // 1. Verificar buckets
+      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+      console.log('📋 Available buckets:', buckets?.map(b => b.id) || []);
+      
+      if (bucketError) {
+        console.error('❌ Cannot list buckets:', bucketError);
+        toast({
+          title: "❌ Error de buckets",
+          description: "No se pueden listar los buckets. Verifica permisos.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // 2. Verificar si avatar bucket existe
+      const avatarBucket = buckets?.find(b => b.id === 'avatars');
+      if (!avatarBucket) {
+        console.warn('⚠️ Avatar bucket does not exist');
+        toast({
+          title: "⚠️ Bucket no encontrado",
+          description: "El bucket 'avatars' no existe. Ejecuta la migración SQL.",
+          variant: "destructive"
+        });
+        showSetupInstructions();
+        return;
+      }
+
+      console.log('✅ Avatar bucket configuration:', avatarBucket);
+
+      // 3. Verificar permisos intentando listar archivos
+      const { data: files, error: listError } = await supabase.storage
+        .from('avatars')
+        .list('', { limit: 1 });
+
+      if (listError) {
+        console.error('❌ Cannot list avatar files:', listError);
+        toast({
+          title: "❌ Error de permisos",
+          description: "No se puede acceder al bucket. Verifica las políticas RLS.",
+          variant: "destructive"
+        });
+        showSetupInstructions();
+        return;
+      }
+
+      console.log('✅ Avatar bucket is accessible');
+      
+      toast({
+        title: "✅ Diagnóstico exitoso",
+        description: "El almacenamiento está configurado correctamente.",
+      });
+
+    } catch (error: any) {
+      console.error('💥 Diagnosis failed:', error);
+      toast({
+        title: "💥 Error de diagnóstico",
+        description: error.message || "Error desconocido durante el diagnóstico",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 📋 MOSTRAR INSTRUCCIONES DE CONFIGURACIÓN
+  const showSetupInstructions = () => {
+    console.log(`
+🔧 SUPABASE STORAGE SETUP REQUIRED
+
+1. Go to your Supabase project dashboard
+2. Navigate to SQL Editor
+3. Run the following commands:
+
+-- Create avatars bucket
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'avatars',
+  'avatars', 
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Create RLS policies
+CREATE POLICY "Public Access" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
+
+CREATE POLICY "Users can upload avatars" ON storage.objects 
+FOR INSERT 
+WITH CHECK (
+  bucket_id = 'avatars' 
+  AND auth.role() = 'authenticated'
+);
+
+4. After running these commands, try uploading again.
+    `);
+    
+    toast({
+      title: "📋 Instrucciones mostradas",
+      description: "Revisa la consola para ver los comandos SQL necesarios.",
+    });
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
@@ -537,6 +646,12 @@ export function StorageDebug() {
             <div className="flex gap-2 flex-wrap">
               <Button onClick={createBucketNow} disabled={loading} className="bg-green-600 hover:bg-green-700">
                 {loading ? 'Creating...' : '🔧 CREATE BUCKET NOW'}
+              </Button>
+              <Button onClick={diagnoseStorageSetup} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+                {loading ? 'Diagnosing...' : '🔍 DIAGNOSE STORAGE'}
+              </Button>
+              <Button onClick={showSetupInstructions} disabled={loading} className="bg-purple-600 hover:bg-purple-700">
+                📋 SHOW SQL COMMANDS
               </Button>
             </div>
           </div>
