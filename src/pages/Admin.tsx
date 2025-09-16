@@ -405,7 +405,7 @@ export default function Admin() {
     add(['Programas', activity.programs]);
     add(['Usuarios en programas', activity.usersInPrograms]);
     add(['Cursos', activity.courses]);
-    add(['Usuarios en cursos individuales', activity.usersInIndividual]);
+      add(['Usuarios en programas', activity.usersInIndividual]);
     add(['Nuevos 7 días', activity.newWeek]);
     add(['Nuevos 30 días', activity.newMonth]);
     add(['Nuevos 365 días', activity.newYear]);
@@ -487,7 +487,7 @@ export default function Admin() {
               <Card role="button" onClick={() => openActivityDialog('programs', 'Programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.programs}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('usersInPrograms', 'Usuarios en programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios en programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.usersInPrograms}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('courses', 'Cursos')}><CardHeader className="pb-2"><CardTitle className="text-sm">Cursos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.courses}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('usersInIndividual', 'Usuarios en cursos individuales')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios en cursos individuales</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.usersInIndividual}</div></CardContent></Card>
+                <Card role="button" onClick={() => openActivityDialog('usersInIndividual', 'Usuarios en programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios en programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.usersInIndividual}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('newWeek', 'Nuevos usuarios 7 días')}><CardHeader className="pb-2"><CardTitle className="text-sm">Nuevos usuarios 7 días</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.newWeek}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('newMonth', 'Nuevos usuarios en 30 días')}><CardHeader className="pb-2"><CardTitle className="text-sm">Nuevos usuarios en 30 días</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.newMonth}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('active30', 'Usuarios activos 30 días')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios activos 30 días</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.active30}</div></CardContent></Card>

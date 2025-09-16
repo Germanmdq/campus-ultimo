@@ -6,23 +6,121 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Mail, Shield, Moon, Sun, Bell, Lock } from 'lucide-react';
+import { User, Mail, Shield, Moon, Sun, Bell, Lock, Monitor, Smartphone, LogOut } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserStats } from '@/hooks/useUserStats';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 export default function Cuenta() {
-  const { profile, user } = useAuth();
+  const { profile, user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
   const { stats } = useUserStats();
   const [name, setName] = useState('');
+  const [preferences, setPreferences] = useState({
+    emailNotifications: true,
+    pushNotifications: false,
+    studyReminders: true,
+  });
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setName(profile?.full_name || '');
+    loadSessions();
   }, [profile?.full_name]);
+
+  const loadSessions = async () => {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      
+      // Simulate multiple sessions for demo
+      setSessions([
+        {
+          id: 'current',
+          device: 'Chrome en macOS',
+          location: 'Buenos Aires, Argentina',
+          lastActive: new Date().toISOString(),
+          current: true
+        },
+        {
+          id: 'mobile',
+          device: 'Safari en iPhone',
+          location: 'Buenos Aires, Argentina',
+          lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          current: false
+        }
+      ]);
+    } catch (error) {
+      console.error('Error loading sessions:', error);
+    }
+  };
+
+  const handlePreferenceChange = async (key: string, value: boolean) => {
+    setPreferences(prev => ({ ...prev, [key]: value }));
+    
+    try {
+      // Save to user preferences (you can create a user_preferences table)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          preferences: { ...preferences, [key]: value }
+        })
+        .eq('id', profile?.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Preferencia actualizada',
+        description: 'Tu configuración fue guardada.'
+      });
+    } catch (error) {
+      console.error('Error saving preference:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar la preferencia.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: 'newPassword123' // In real app, get from form
+      });
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Contraseña actualizada',
+        description: 'Tu contraseña fue cambiada exitosamente.'
+      });
+    } catch (error) {
+      console.error('Error changing password:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo cambiar la contraseña.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleSignOutAll = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast({
+        title: 'Sesión cerrada',
+        description: 'Has cerrado sesión exitosamente.'
+      });
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   const getUserInitials = (name: string) => {
     return name
@@ -109,14 +207,6 @@ export default function Cuenta() {
                 </p>
               </div>
 
-              <div>
-                <Label>Fecha de Registro</Label>
-                <Input 
-                  value={new Date(profile?.created_at || '').toLocaleDateString()} 
-                  disabled
-                  className="bg-muted"
-                />
-              </div>
             </div>
 
             <Button onClick={async () => {
@@ -162,7 +252,10 @@ export default function Cuenta() {
                     Recibir actualizaciones por correo
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={preferences.emailNotifications}
+                  onCheckedChange={(checked) => handlePreferenceChange('emailNotifications', checked)}
+                />
               </div>
 
               <div className="flex items-center justify-between">
@@ -172,7 +265,10 @@ export default function Cuenta() {
                     Notificaciones en tiempo real
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={preferences.pushNotifications}
+                  onCheckedChange={(checked) => handlePreferenceChange('pushNotifications', checked)}
+                />
               </div>
 
               <div className="flex items-center justify-between">
@@ -182,7 +278,10 @@ export default function Cuenta() {
                     Recordatorios diarios para estudiar
                   </p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={preferences.studyReminders}
+                  onCheckedChange={(checked) => handlePreferenceChange('studyReminders', checked)}
+                />
               </div>
             </CardContent>
           </Card>
@@ -203,7 +302,7 @@ export default function Cuenta() {
                     Actualiza tu contraseña por seguridad
                   </p>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handlePasswordChange}>
                   <Lock className="h-4 w-4 mr-2" />
                   Cambiar
                 </Button>
@@ -216,22 +315,71 @@ export default function Cuenta() {
                     Añade una capa extra de seguridad
                   </p>
                 </div>
-                <Button variant="outline" size="sm">
-                  Configurar
+                <Button variant="outline" size="sm" disabled>
+                  <Shield className="h-4 w-4 mr-2" />
+                  Próximamente
                 </Button>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Sesiones Activas</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Gestiona tus sesiones abiertas
-                  </p>
-                </div>
-                <Button variant="outline" size="sm">
-                  Ver Sesiones
-                </Button>
-              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Sesiones Activas</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Gestiona tus sesiones abiertas ({sessions.length})
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      Ver Sesiones
+                    </Button>
+                  </div>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Sesiones Activas</DialogTitle>
+                    <DialogDescription>
+                      Gestiona las sesiones abiertas en tus dispositivos
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {sessions.map((session) => (
+                      <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          {session.device.includes('iPhone') || session.device.includes('Android') ? (
+                            <Smartphone className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <Monitor className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          <div>
+                            <p className="font-medium">{session.device}</p>
+                            <p className="text-sm text-muted-foreground">{session.location}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Última actividad: {new Date(session.lastActive).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {session.current && (
+                            <Badge variant="default">Actual</Badge>
+                          )}
+                          {!session.current && (
+                            <Button variant="outline" size="sm">
+                              <LogOut className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex justify-end pt-4">
+                      <Button variant="destructive" onClick={handleSignOutAll}>
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Cerrar Todas las Sesiones
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </div>

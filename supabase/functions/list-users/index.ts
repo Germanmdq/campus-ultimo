@@ -27,33 +27,37 @@ serve(async (req) => {
     const sortDir = (url.searchParams.get('sortDir') || 'desc').toLowerCase(); // 'asc' | 'desc'
     const returnAll = (url.searchParams.get('all') || 'false').toLowerCase() === 'true';
 
-    // List auth users with a large page to allow filtering/pagination server-side
-    const { data: listRes, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 2000 });
-    if (listErr) throw listErr;
-    const authUsers = listRes?.users || [];
-
-    const userIds = authUsers.map(u => u.id);
-    let { data: profiles } = await admin
+    // OPTIMIZED: Get profiles directly instead of auth users first
+    let { data: profiles, error: profilesError } = await admin
       .from('profiles')
       .select('id, full_name, role, created_at')
-      .in('id', userIds);
+      .limit(1000); // Limit to prevent timeouts
 
+    if (profilesError) throw profilesError;
     profiles = profiles || [];
-    const idToProfile: Record<string, any> = {};
-    profiles.forEach(p => { idToProfile[p.id] = p; });
 
-    // Merge and filter by role/search
-    const merged = authUsers.map(u => {
-      const p = idToProfile[u.id] || {};
-      const meta = (u as any).user_metadata || {};
-      const derivedName = p.full_name || meta.full_name || meta.name || (u.email ? (u.email.split('@')[0] || '') : '');
+    // Get auth data only for the profiles we have
+    const userIds = profiles.map(p => p.id);
+    const { data: listRes, error: listErr } = await admin.auth.admin.listUsers({ 
+      page: 1, 
+      perPage: Math.min(userIds.length, 1000) 
+    });
+    
+    const authUsers = listRes?.users || [];
+    const authUsersMap = new Map(authUsers.map(u => [u.id, u]));
+
+    // OPTIMIZED: Merge profiles with auth data efficiently
+    const merged = profiles.map(p => {
+      const authUser = authUsersMap.get(p.id);
+      const meta = authUser?.user_metadata || {};
+      const derivedName = p.full_name || meta.full_name || meta.name || (authUser?.email ? (authUser.email.split('@')[0] || '') : '');
       return {
-        id: u.id,
-        email: u.email || '',
+        id: p.id,
+        email: authUser?.email || '',
         full_name: derivedName,
         role: p.role || 'student',
-        created_at: p.created_at || u.created_at || null,
-        last_sign_in_at: (u as any).last_sign_in_at || null,
+        created_at: p.created_at || authUser?.created_at || null,
+        last_sign_in_at: authUser?.last_sign_in_at || null,
       };
     });
 
@@ -83,20 +87,22 @@ serve(async (req) => {
 
     let filtered = merged.filter(u => roleFilter(u.role) && searchFilter(u));
 
-    // Attach program enrollments count and search by programs/courses
-    if (filtered.length > 0) {
+    // OPTIMIZED: Only fetch enrollments if we have search terms or need program counts
+    if (filtered.length > 0 && (search || returnAll)) {
       const ids = filtered.map(u => u.id);
       const [{ data: enrs }, { data: cenrs }] = await Promise.all([
         admin
           .from('enrollments')
           .select('user_id, programs(title)')
           .eq('status', 'active')
-          .in('user_id', ids),
+          .in('user_id', ids)
+          .limit(500), // Limit to prevent timeouts
         admin
           .from('course_enrollments')
           .select('user_id, courses(title)')
           .eq('status', 'active')
           .in('user_id', ids)
+          .limit(500) // Limit to prevent timeouts
       ]);
       
       const programCountByUser: Record<string, number> = {};
