@@ -5,13 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, Search, UserCheck, UserX, Crown, GraduationCap, Loader2, Eye } from 'lucide-react';
+import { Users, Search, UserCheck, UserX, Crown, GraduationCap, Loader2, Eye, Filter, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { UserProfileDialog } from '@/components/admin/UserProfileDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useDebounce } from '@/hooks/useDebounce';
 
 interface User {
   id: string;
@@ -22,6 +23,8 @@ interface User {
   enrolledPrograms: number;
   joinedAt: string;
   lastSignInAt?: string | null;
+  programs?: string[];
+  courses?: string[];
 }
 
 export default function Usuarios() {
@@ -41,6 +44,10 @@ export default function Usuarios() {
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [sortBy, setSortBy] = useState<'created_at' | 'name' | 'email'>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Debounce para optimizar búsquedas
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
   const isAdmin = profile?.role === 'admin';
@@ -49,7 +56,7 @@ export default function Usuarios() {
     if (isTeacherOrAdmin) {
       fetchUsers();
     }
-  }, [isTeacherOrAdmin, filterRole, searchTerm, page, sortBy, sortDir]);
+  }, [isTeacherOrAdmin, filterRole, debouncedSearchTerm, page, sortBy, sortDir]);
 
   const fetchUsers = async () => {
     if (!isTeacherOrAdmin) return;
@@ -60,7 +67,7 @@ export default function Usuarios() {
       const params = new URLSearchParams();
       const roleParam = filterRole === 'formador' ? 'teacher' : filterRole; // map UI->DB
       params.set('role', roleParam);
-      if (searchTerm) params.set('search', searchTerm);
+      if (debouncedSearchTerm) params.set('search', debouncedSearchTerm);
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
       params.set('sortBy', sortBy);
@@ -80,6 +87,8 @@ export default function Usuarios() {
             enrolledPrograms: u.program_enrollments ?? 0,
             joinedAt: u.created_at || new Date().toISOString(),
             lastSignInAt: u.last_sign_in_at || null,
+            programs: u.programs || [],
+            courses: u.courses || [],
           }));
           setUsers(arr);
           setTotal(json.data.total || arr.length);
@@ -243,11 +252,21 @@ export default function Usuarios() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar usuarios..."
+                placeholder="Buscar por nombre, email, programa o curso..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
+              {searchTerm && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                  onClick={() => setSearchTerm('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
             </div>
             <Select value={filterRole} onValueChange={setFilterRole}>
               <SelectTrigger className="w-40">
@@ -356,6 +375,12 @@ export default function Usuarios() {
                       {user.status === 'active' ? 'Activo' : 'Inactivo'}
                     </Badge>
                     <Badge variant="secondary">Programas: {user.enrolledPrograms}</Badge>
+                    {user.programs && user.programs.length > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        {user.programs.slice(0, 2).join(', ')}
+                        {user.programs.length > 2 && ` +${user.programs.length - 2}`}
+                      </Badge>
+                    )}
                     <span className="text-xs text-muted-foreground">
                       Desde {formatDate(user.joinedAt)}
                     </span>
@@ -439,6 +464,12 @@ export default function Usuarios() {
                           {user.status === 'active' ? 'Activo' : 'Inactivo'}
                         </Badge>
                         <Badge variant="secondary">Programas: {user.enrolledPrograms}</Badge>
+                        {user.programs && user.programs.length > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            {user.programs.slice(0, 2).join(', ')}
+                            {user.programs.length > 2 && ` +${user.programs.length - 2}`}
+                          </Badge>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           Desde {formatDate(user.joinedAt)}
                         </span>

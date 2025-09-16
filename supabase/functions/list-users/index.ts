@@ -63,26 +63,81 @@ serve(async (req) => {
     };
     const searchFilter = (u: any) => {
       if (!search) return true;
-      return (u.full_name || '').toLowerCase().includes(search) || (u.email || '').toLowerCase().includes(search);
+      const searchLower = search.toLowerCase();
+      const name = (u.full_name || '').toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      
+      // Búsqueda más inteligente: palabras separadas, coincidencias parciales
+      const searchWords = searchLower.split(/\s+/).filter(w => w.length > 0);
+      
+      // Si hay múltiples palabras, todas deben coincidir
+      if (searchWords.length > 1) {
+        return searchWords.every(word => 
+          name.includes(word) || email.includes(word)
+        );
+      }
+      
+      // Búsqueda simple para una palabra
+      return name.includes(searchLower) || email.includes(searchLower);
     };
 
     let filtered = merged.filter(u => roleFilter(u.role) && searchFilter(u));
 
-    // Attach program enrollments count for filtered users
+    // Attach program enrollments count and search by programs/courses
     if (filtered.length > 0) {
       const ids = filtered.map(u => u.id);
-      const { data: enrs } = await admin
-        .from('enrollments')
-        .select('user_id')
-        .eq('status', 'active')
-        .in('user_id', ids);
+      const [{ data: enrs }, { data: cenrs }] = await Promise.all([
+        admin
+          .from('enrollments')
+          .select('user_id, programs(title)')
+          .eq('status', 'active')
+          .in('user_id', ids),
+        admin
+          .from('course_enrollments')
+          .select('user_id, courses(title)')
+          .eq('status', 'active')
+          .in('user_id', ids)
+      ]);
+      
       const programCountByUser: Record<string, number> = {};
+      const programsByUser: Record<string, string[]> = {};
+      const coursesByUser: Record<string, string[]> = {};
+      
       (enrs || []).forEach((e: any) => {
         const uid = e.user_id;
         if (!uid) return;
         programCountByUser[uid] = (programCountByUser[uid] || 0) + 1;
+        if (e.programs?.title) {
+          if (!programsByUser[uid]) programsByUser[uid] = [];
+          programsByUser[uid].push(e.programs.title);
+        }
       });
-      filtered = filtered.map(u => ({ ...u, program_enrollments: programCountByUser[u.id] || 0 }));
+      
+      (cenrs || []).forEach((e: any) => {
+        const uid = e.user_id;
+        if (!uid) return;
+        if (e.courses?.title) {
+          if (!coursesByUser[uid]) coursesByUser[uid] = [];
+          coursesByUser[uid].push(e.courses.title);
+        }
+      });
+      
+      // Si hay búsqueda, filtrar también por programas y cursos
+      if (search) {
+        const searchLower = search.toLowerCase();
+        filtered = filtered.filter(u => {
+          const userPrograms = (programsByUser[u.id] || []).join(' ').toLowerCase();
+          const userCourses = (coursesByUser[u.id] || []).join(' ').toLowerCase();
+          return userPrograms.includes(searchLower) || userCourses.includes(searchLower);
+        });
+      }
+      
+      filtered = filtered.map(u => ({ 
+        ...u, 
+        program_enrollments: programCountByUser[u.id] || 0,
+        programs: programsByUser[u.id] || [],
+        courses: coursesByUser[u.id] || []
+      }));
     }
 
     // Sort
