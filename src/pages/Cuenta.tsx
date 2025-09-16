@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserStats } from '@/hooks/useUserStats';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AvatarUpload } from '@/components/ui/avatar-upload';
 
 export default function Cuenta() {
   const { profile, user, signOut } = useAuth();
@@ -27,11 +28,13 @@ export default function Cuenta() {
   });
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   useEffect(() => {
     setName(profile?.full_name || '');
+    setAvatarUrl(profile?.avatar_url || '');
     loadSessions();
-  }, [profile?.full_name]);
+  }, [profile?.full_name, profile?.avatar_url]);
 
   const loadSessions = async () => {
     try {
@@ -168,18 +171,17 @@ export default function Cuenta() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-20 w-20">
-                <AvatarFallback className="bg-accent text-accent-foreground text-lg">
-                  {getUserInitials(profile?.full_name || profile?.email || '—')}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h3 className="text-xl font-semibold">{profile?.full_name || profile?.email || '—'}</h3>
-                <Badge className={getRoleColor(profile?.role || 'student')}>
-                  {getRoleLabel(profile?.role || 'student')}
-                </Badge>
-              </div>
+            <AvatarUpload
+              value={avatarUrl}
+              onChange={setAvatarUrl}
+              name={profile?.full_name || profile?.email || 'Usuario'}
+              className="mb-4"
+            />
+            <div>
+              <h3 className="text-xl font-semibold">{profile?.full_name || profile?.email || '—'}</h3>
+              <Badge className={getRoleColor(profile?.role || 'student')}>
+                {getRoleLabel(profile?.role || 'student')}
+              </Badge>
             </div>
 
             <div className="space-y-4">
@@ -213,12 +215,15 @@ export default function Cuenta() {
               if (!profile?.id) return;
               const { error } = await supabase
                 .from('profiles')
-                .update({ full_name: name.trim() || null })
+                .update({ 
+                  full_name: name.trim() || null,
+                  avatar_url: avatarUrl || null
+                })
                 .eq('id', profile.id);
               if (error) {
                 toast({ title: 'Error', description: error.message || 'No se pudo actualizar', variant: 'destructive' });
               } else {
-                toast({ title: 'Perfil actualizado', description: 'Tu nombre fue guardado.' });
+                toast({ title: 'Perfil actualizado', description: 'Tu perfil fue guardado.' });
               }
             }}>Actualizar Perfil</Button>
           </CardContent>

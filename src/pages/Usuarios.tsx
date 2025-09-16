@@ -439,7 +439,7 @@ export default function Usuarios() {
                 </div>
               ) : (
                 // Versión desktop
-                <div className="flex items-center justify-between">
+                <div className="space-y-4">
                   <div className="flex items-center gap-4">
                     <Avatar className="h-12 w-12">
                       <AvatarFallback className="bg-accent text-accent-foreground">
@@ -447,13 +447,13 @@ export default function Usuarios() {
                       </AvatarFallback>
                     </Avatar>
                     
-                    <div>
+                    <div className="flex-1">
                       <h3 className="font-semibold text-foreground">{user.name}</h3>
                       <p className="text-sm text-muted-foreground">{user.email}</p>
                       {user.lastSignInAt && (
                         <p className="text-xs text-muted-foreground">Último acceso: {formatDate(user.lastSignInAt)}</p>
                       )}
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <Badge className={getRoleColor(user.role)}>
                           <div className="flex items-center gap-1">
                             {getRoleIcon(user.role)}
@@ -477,7 +477,7 @@ export default function Usuarios() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -485,7 +485,6 @@ export default function Usuarios() {
                         setSelectedUserId(user.id);
                         setShowUserProfile(true);
                       }}
-                      className="mr-2"
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       Ver Perfil

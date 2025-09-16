@@ -483,16 +483,79 @@ export default function Admin() {
           </div>
         ) : (
           <>
-            <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
-              <Card role="button" onClick={() => openActivityDialog('programs', 'Programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.programs}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('usersInPrograms', 'Usuarios en programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios en programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.usersInPrograms}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('courses', 'Cursos')}><CardHeader className="pb-2"><CardTitle className="text-sm">Cursos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.courses}</div></CardContent></Card>
-                <Card role="button" onClick={() => openActivityDialog('usersInIndividual', 'Usuarios en programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios en programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.usersInIndividual}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('newWeek', 'Nuevos usuarios 7 días')}><CardHeader className="pb-2"><CardTitle className="text-sm">Nuevos usuarios 7 días</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.newWeek}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('newMonth', 'Nuevos usuarios en 30 días')}><CardHeader className="pb-2"><CardTitle className="text-sm">Nuevos usuarios en 30 días</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.newMonth}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('active30', 'Usuarios activos 30 días')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios activos 30 días</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.active30}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('active7', 'Usuarios activos esta semana')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios activos esta semana</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.active7}</div></CardContent></Card>
-              <Card role="button" onClick={() => openActivityDialog('newYear', 'Nuevos usuarios este año')}><CardHeader className="pb-2"><CardTitle className="text-sm">Nuevos usuarios este año</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.newYear}</div></CardContent></Card>
+            <div className={`grid gap-4 ${isMobile ? 'grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+              <Card role="button" onClick={() => openActivityDialog('programs', 'Programas')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Programas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.programs}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('usersInPrograms', 'Usuarios en programas')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en programas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.usersInPrograms}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('courses', 'Cursos')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Cursos</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.courses}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('usersInIndividual', 'Usuarios en programas')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en programas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.usersInIndividual}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('newWeek', 'Nuevos usuarios 7 días')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Nuevos 7 días</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.newWeek}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('newMonth', 'Nuevos usuarios en 30 días')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Nuevos 30 días</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.newMonth}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('active30', 'Usuarios activos 30 días')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Activos 30 días</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.active30}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('active7', 'Usuarios activos esta semana')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Activos 7 días</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.active7}</div>
+                </CardContent>
+              </Card>
+              <Card role="button" onClick={() => openActivityDialog('newYear', 'Nuevos usuarios este año')} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Nuevos este año</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.newYear}</div>
+                </CardContent>
+              </Card>
             </div>
             <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-2'} mt-4`}>
               <Card>
@@ -526,22 +589,38 @@ export default function Admin() {
             </div>
 
             {/* Totales por rol - responsive */}
-            <div className={`grid gap-6 ${isMobile ? 'grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-4'} mt-4`}>
-              <Card role="button" className="cursor-pointer" onClick={() => openActivityDialog('totalStudents', 'Total de estudiantes')}>
-                <CardHeader className="pb-2"><CardTitle className="text-sm">Total de estudiantes</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold">{activity.totalStudents}</div></CardContent>
+            <div className={`grid gap-4 ${isMobile ? 'grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-4'} mt-4`}>
+              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('totalStudents', 'Total de estudiantes')}>
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Estudiantes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalStudents}</div>
+                </CardContent>
               </Card>
-              <Card role="button" className="cursor-pointer" onClick={() => openActivityDialog('activeStudentsMonth', 'Estudiantes activos último mes')}>
-                <CardHeader className="pb-2"><CardTitle className="text-sm">Estudiantes activos último mes</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold">{activity.totalActiveStudentsMonth}</div></CardContent>
+              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('activeStudentsMonth', 'Estudiantes activos último mes')}>
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Activos mes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalActiveStudentsMonth}</div>
+                </CardContent>
               </Card>
-              <Card role="button" className="cursor-pointer" onClick={() => openActivityDialog('totalTeachers', 'Total de formadores')}>
-                <CardHeader className="pb-2"><CardTitle className="text-sm">Total de formadores</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold">{activity.totalTeachers}</div></CardContent>
+              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('totalTeachers', 'Total de formadores')}>
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Formadores</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalTeachers}</div>
+                </CardContent>
               </Card>
-              <Card role="button" className="cursor-pointer" onClick={() => openActivityDialog('totalVolunteers', 'Total de voluntarios')}>
-                <CardHeader className="pb-2"><CardTitle className="text-sm">Total de voluntarios</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold">{activity.totalVolunteers}</div></CardContent>
+              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('totalVolunteers', 'Total de voluntarios')}>
+                <CardHeader className="pb-2">
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Voluntarios</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalVolunteers}</div>
+                </CardContent>
               </Card>
             </div>
           </>

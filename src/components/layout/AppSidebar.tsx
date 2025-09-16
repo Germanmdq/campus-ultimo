@@ -81,7 +81,7 @@ const getNavigationItems = (role: string) => {
 };
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, setOpenMobile } = useSidebar();
   const { profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
@@ -164,7 +164,16 @@ export function AppSidebar() {
               {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className={getNavClass}>
+                    <NavLink 
+                      to={item.url} 
+                      className={getNavClass}
+                      onClick={() => {
+                        // Close mobile sidebar when navigating
+                        if (window.innerWidth < 768) {
+                          setOpenMobile(false);
+                        }
+                      }}
+                    >
                       <item.icon className="h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
