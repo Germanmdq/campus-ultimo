@@ -105,9 +105,6 @@ export default function Auth() {
           <p className="text-muted-foreground">
             Accede a tu cuenta para continuar
           </p>
-          <p className="text-sm text-blue-600 font-semibold mt-2">
-            🚀 ESTO ES UNA PRUEBA - COMMIT FUNCIONANDO EN VERCEL 🚀
-          </p>
         </div>
 
         <Card>
@@ -199,8 +196,8 @@ export default function Auth() {
         </Card>
 
         <div className="mt-4 text-center text-xs text-muted-foreground space-y-1">
-          <div>¿Olvidaste tu contraseña? Haz click en enviar "Link Mágico"</div>
-          <div>¿No tienes cuenta? Contacta a info@espaciodegeometriasagrada.com</div>
+          <div>¿Olvidaste tu contraseña? Haz click en "Enviar Link Mágico"</div>
+          <div>¿No tienes cuenta? Escribe a info@espaciodegeometriasagrada.com para que podamos ayudarte</div>
         </div>
       </div>
     </div>

@@ -74,7 +74,12 @@ export default function Calendario() {
 
       if (errorRes) {
         // Fallback sin ordenar por columna inexistente (si aplica)
-        const { data } = await supabase.from('events').select('*');
+        const todayStart = new Date();
+        todayStart.setHours(0,0,0,0);
+        const { data } = await supabase
+          .from('events')
+          .select('*')
+          .gte('end_at', todayStart.toISOString());
         setEvents(data || []);
       } else {
         setEvents(dataRes || []);
