@@ -14,9 +14,11 @@ import { ProgramSelectorDialog } from '@/components/admin/ProgramSelectorDialog'
 import { useStats } from '@/hooks/useStats';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export default function Admin() {
   const { profile, loading: authLoading } = useAuth();
+  const isMobile = useIsMobile();
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [showCreateCourse, setShowCreateCourse] = useState(false);
   const [showAddCourses, setShowAddCourses] = useState(false);
@@ -481,7 +483,7 @@ export default function Admin() {
           </div>
         ) : (
           <>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
               <Card role="button" onClick={() => openActivityDialog('programs', 'Programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.programs}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('usersInPrograms', 'Usuarios en programas')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios en programas</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.usersInPrograms}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('courses', 'Cursos')}><CardHeader className="pb-2"><CardTitle className="text-sm">Cursos</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.courses}</div></CardContent></Card>
@@ -492,13 +494,13 @@ export default function Admin() {
               <Card role="button" onClick={() => openActivityDialog('active7', 'Usuarios activos esta semana')}><CardHeader className="pb-2"><CardTitle className="text-sm">Usuarios activos esta semana</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.active7}</div></CardContent></Card>
               <Card role="button" onClick={() => openActivityDialog('newYear', 'Nuevos usuarios este año')}><CardHeader className="pb-2"><CardTitle className="text-sm">Nuevos usuarios este año</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{activity.newYear}</div></CardContent></Card>
             </div>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 mt-4">
+            <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-2'} mt-4`}>
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm">Más Vistos</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-3">
+                  <div className={`grid ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-2'} gap-3`}>
                     <div className="p-3 border rounded-lg">
                       <div className="text-xs text-muted-foreground mb-1">Programa más visto</div>
                       <div className="font-medium line-clamp-2">{activity.topProgramTitle || '—'}</div>
@@ -523,8 +525,8 @@ export default function Admin() {
               
             </div>
 
-            {/* Totales por rol - 4 por fila */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mt-4">
+            {/* Totales por rol - responsive */}
+            <div className={`grid gap-6 ${isMobile ? 'grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-4'} mt-4`}>
               <Card role="button" className="cursor-pointer" onClick={() => openActivityDialog('totalStudents', 'Total de estudiantes')}>
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Total de estudiantes</CardTitle></CardHeader>
                 <CardContent><div className="text-2xl font-bold">{activity.totalStudents}</div></CardContent>

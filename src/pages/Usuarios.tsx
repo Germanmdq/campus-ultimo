@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { UserProfileDialog } from '@/components/admin/UserProfileDialog';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface User {
   id: string;
@@ -27,6 +28,7 @@ export default function Usuarios() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('todos');
   const [users, setUsers] = useState<User[]>([]);
@@ -330,90 +332,171 @@ export default function Usuarios() {
         {filteredUsers.map(user => (
           <Card key={user.id}>
             <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-accent text-accent-foreground">
-                      {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  
-                  <div>
-                    <h3 className="font-semibold text-foreground">{user.name}</h3>
-                    <p className="text-sm text-muted-foreground">{user.email}</p>
-                    {user.lastSignInAt && (
-                      <p className="text-xs text-muted-foreground">Último acceso: {formatDate(user.lastSignInAt)}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge className={getRoleColor(user.role)}>
-                        <div className="flex items-center gap-1">
-                          {getRoleIcon(user.role)}
-                          {getRoleLabel(user.role)}
-                        </div>
-                      </Badge>
-                      <Badge variant={user.status === 'active' ? 'default' : 'secondary'}>
-                        {user.status === 'active' ? 'Activo' : 'Inactivo'}
-                      </Badge>
-                      <Badge variant="secondary">Programas: {user.enrolledPrograms}</Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Desde {formatDate(user.joinedAt)}
-                      </span>
+              {isMobile ? (
+                // Versión móvil
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground text-lg">{user.name}</h3>
+                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                      {user.lastSignInAt && (
+                        <p className="text-xs text-muted-foreground">Último acceso: {formatDate(user.lastSignInAt)}</p>
+                      )}
                     </div>
                   </div>
-                </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={getRoleColor(user.role)}>
+                      <div className="flex items-center gap-1">
+                        {getRoleIcon(user.role)}
+                        {getRoleLabel(user.role)}
+                      </div>
+                    </Badge>
+                    <Badge variant={user.status === 'active' ? 'default' : 'secondary'}>
+                      {user.status === 'active' ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                    <Badge variant="secondary">Programas: {user.enrolledPrograms}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Desde {formatDate(user.joinedAt)}
+                    </span>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  {/* Removido el conteo de programas para evitar ruido; ver detalle dentro del perfil */}
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedUserId(user.id);
-                      setShowUserProfile(true);
-                    }}
-                    className="mr-2"
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    Ver Perfil
-                  </Button>
-                  
-                  {isAdmin && (
-                    <Select
-                      value={user.role}
-                      onValueChange={(value) => handleChangeRole(user.id, value as 'student' | 'formador' | 'voluntario' | 'admin')}
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedUserId(user.id);
+                        setShowUserProfile(true);
+                      }}
+                      className="w-full"
                     >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="student">Estudiante</SelectItem>
-                        <SelectItem value="formador">Formador</SelectItem>
-                        <SelectItem value="voluntario">Voluntario</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                  
-                  <Button
-                    variant={user.status === 'active' ? 'destructive' : 'default'}
-                    size="sm"
-                    onClick={() => handleToggleUserStatus(user.id)}
-                  >
-                    {user.status === 'active' ? (
-                      <>
-                        <UserX className="h-4 w-4 mr-1" />
-                        Desactivar
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="h-4 w-4 mr-1" />
-                        Activar
-                      </>
+                      <Eye className="h-4 w-4 mr-1" />
+                      Ver Perfil
+                    </Button>
+                    
+                    {isAdmin && (
+                      <Select
+                        value={user.role}
+                        onValueChange={(value) => handleChangeRole(user.id, value as 'student' | 'formador' | 'voluntario' | 'admin')}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="student">Estudiante</SelectItem>
+                          <SelectItem value="formador">Formador</SelectItem>
+                          <SelectItem value="voluntario">Voluntario</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
                     )}
-                  </Button>
+                    
+                    <Button
+                      variant={user.status === 'active' ? 'destructive' : 'default'}
+                      size="sm"
+                      onClick={() => handleToggleUserStatus(user.id)}
+                      className="w-full"
+                    >
+                      {user.status === 'active' ? (
+                        <>
+                          <UserX className="h-4 w-4 mr-1" />
+                          Desactivar
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="h-4 w-4 mr-1" />
+                          Activar
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                // Versión desktop
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-12 w-12">
+                      <AvatarFallback className="bg-accent text-accent-foreground">
+                        {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    
+                    <div>
+                      <h3 className="font-semibold text-foreground">{user.name}</h3>
+                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                      {user.lastSignInAt && (
+                        <p className="text-xs text-muted-foreground">Último acceso: {formatDate(user.lastSignInAt)}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge className={getRoleColor(user.role)}>
+                          <div className="flex items-center gap-1">
+                            {getRoleIcon(user.role)}
+                            {getRoleLabel(user.role)}
+                          </div>
+                        </Badge>
+                        <Badge variant={user.status === 'active' ? 'default' : 'secondary'}>
+                          {user.status === 'active' ? 'Activo' : 'Inactivo'}
+                        </Badge>
+                        <Badge variant="secondary">Programas: {user.enrolledPrograms}</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Desde {formatDate(user.joinedAt)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedUserId(user.id);
+                        setShowUserProfile(true);
+                      }}
+                      className="mr-2"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Ver Perfil
+                    </Button>
+                    
+                    {isAdmin && (
+                      <Select
+                        value={user.role}
+                        onValueChange={(value) => handleChangeRole(user.id, value as 'student' | 'formador' | 'voluntario' | 'admin')}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="student">Estudiante</SelectItem>
+                          <SelectItem value="formador">Formador</SelectItem>
+                          <SelectItem value="voluntario">Voluntario</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    
+                    <Button
+                      variant={user.status === 'active' ? 'destructive' : 'default'}
+                      size="sm"
+                      onClick={() => handleToggleUserStatus(user.id)}
+                    >
+                      {user.status === 'active' ? (
+                        <>
+                          <UserX className="h-4 w-4 mr-1" />
+                          Desactivar
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="h-4 w-4 mr-1" />
+                          Activar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -428,7 +511,7 @@ export default function Usuarios() {
       </div>
 
       {/* Estadísticas */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className={`grid gap-4 ${isMobile ? 'grid-cols-2' : 'md:grid-cols-4'}`}>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">

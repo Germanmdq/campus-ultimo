@@ -99,7 +99,7 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-[calc(42rem-10px)]">
         <div className="text-center mb-8">
           <img src="/Logo-email.png" alt="Geometría Sagrada" className="h-20 w-auto object-contain mx-auto mb-4" />
           <p className="text-muted-foreground">
@@ -195,8 +195,9 @@ export default function Auth() {
           </CardContent>
         </Card>
 
-        <div className="mt-4 text-center text-xs text-muted-foreground">
-          ¿No tienes cuenta? Contacta al administrador para obtener acceso.
+        <div className="mt-4 text-center text-xs text-muted-foreground space-y-1">
+          <div>¿Olvidaste tu contraseña? Haz click en enviar "Link Mágico"</div>
+          <div>¿No tienes cuenta? Contacta a info@espaciodegeometriasagrada.com</div>
         </div>
       </div>
     </div>
