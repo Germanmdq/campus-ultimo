@@ -12,6 +12,27 @@ export function StorageDebug() {
   const checkStorage = async () => {
     setLoading(true);
     try {
+      // First try the setup function
+      const setupResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/setup-storage`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (setupResponse.ok) {
+        const setupData = await setupResponse.json();
+        console.log('Setup response:', setupData);
+        
+        if (setupData.success) {
+          toast({
+            title: "Storage setup completed",
+            description: `Created ${setupData.data.createdBuckets.length} buckets, found ${setupData.data.existingBuckets.length} existing`
+          });
+        }
+      }
+
       // List all buckets
       const { data: bucketsData, error: bucketsError } = await supabase.storage.listBuckets();
       
@@ -25,24 +46,6 @@ export function StorageDebug() {
         title: "Storage check completed",
         description: `Found ${bucketsData?.length || 0} buckets`
       });
-
-      // Try to create a test bucket if none exist
-      if (!bucketsData || bucketsData.length === 0) {
-        const { error: createError } = await supabase.storage.createBucket('public', {
-          public: true,
-          allowedMimeTypes: ['image/*'],
-          fileSizeLimit: 5242880
-        });
-
-        if (createError) {
-          console.error('Error creating bucket:', createError);
-        } else {
-          toast({
-            title: "Bucket created",
-            description: "Created 'public' bucket successfully"
-          });
-        }
-      }
 
     } catch (error: any) {
       console.error('Storage check error:', error);
@@ -94,9 +97,9 @@ export function StorageDebug() {
         <CardTitle>Storage Debug</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button onClick={checkStorage} disabled={loading}>
-            {loading ? 'Checking...' : 'Check Storage'}
+            {loading ? 'Checking...' : 'Setup Storage'}
           </Button>
           <Button onClick={testUpload} disabled={loading} variant="outline">
             {loading ? 'Testing...' : 'Test Upload'}
