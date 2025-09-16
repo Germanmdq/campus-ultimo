@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserStats } from '@/hooks/useUserStats';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
+import { StorageDebug } from '@/components/debug/StorageDebug';
 
 export default function Cuenta() {
   const { profile, user, signOut } = useAuth();
@@ -228,6 +229,9 @@ export default function Cuenta() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Debug de Storage - TEMPORAL */}
+      <StorageDebug />
 
       {/* Estadísticas del usuario (reales) */}
       <Card>
