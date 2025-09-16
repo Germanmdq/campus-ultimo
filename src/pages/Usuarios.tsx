@@ -89,7 +89,7 @@ export default function Usuarios() {
         if (json?.success && json?.data) {
           const arr: User[] = (json.data.users || []).map((u: any) => ({
             id: u.id,
-            name: (u.full_name && String(u.full_name).trim()) ? u.full_name : ((u.email || '').split('@')[0] || 'Sin nombre'),
+            name: (u.full_name && String(u.full_name).trim()) ? u.full_name : 'Sin nombre',
             email: u.email || 'Sin email',
             role: (u.role === 'teacher' ? 'formador' : (u.role || 'student')) as 'student' | 'formador' | 'voluntario' | 'admin',
             status: 'active',
@@ -126,7 +126,7 @@ export default function Usuarios() {
       const paginated = filtered.slice((page-1)*pageSize, page*pageSize);
       const arr: User[] = paginated.map((u: any) => ({
         id: u.id,
-        name: (u.full_name && String(u.full_name).trim()) ? u.full_name : ((u.email || '').split('@')[0] || 'Sin nombre'),
+        name: (u.full_name && String(u.full_name).trim()) ? u.full_name : 'Sin nombre',
         email: u.email || 'Sin email',
         role: (u.role === 'teacher' ? 'formador' : (u.role || 'student')) as 'student' | 'formador' | 'voluntario' | 'admin',
         status: 'active',
