@@ -187,9 +187,13 @@ export function StorageDebug() {
   const emergencyFixNames = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/emergency-fix-names`, {
+      const url = "https://epqalebkqmkddlfomnyf.functions.supabase.co/emergency-fix-names";
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
       });
 
       if (response.ok) {
@@ -218,9 +222,13 @@ export function StorageDebug() {
   const emergencyFixStorage = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/emergency-fix-storage`, {
+      const url = "https://epqalebkqmkddlfomnyf.functions.supabase.co/emergency-fix-storage";
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
       });
 
       if (response.ok) {
@@ -249,9 +257,13 @@ export function StorageDebug() {
   const emergencyFixAuth = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/emergency-fix-auth`, {
+      const url = "https://epqalebkqmkddlfomnyf.functions.supabase.co/emergency-fix-auth";
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
       });
 
       if (response.ok) {
