@@ -506,57 +506,61 @@ export function StorageDebug() {
     try {
       console.log('🔍 Running storage setup diagnosis...');
       
-      // 1. Verificar buckets
-      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-      console.log('📋 Available buckets:', buckets?.map(b => b.id) || []);
+      // Usar la función SQL especializada para verificar configuración
+      const { data: configData, error: configError } = await supabase.rpc('check_storage_config');
       
-      if (bucketError) {
-        console.error('❌ Cannot list buckets:', bucketError);
-        toast({
-          title: "❌ Error de buckets",
-          description: "No se pueden listar los buckets. Verifica permisos.",
-          variant: "destructive"
-        });
-        return;
+      if (configError) {
+        console.error('❌ Config check failed:', configError);
+        throw configError;
       }
 
-      // 2. Verificar si avatar bucket existe
-      const avatarBucket = buckets?.find(b => b.id === 'avatars');
-      if (!avatarBucket) {
-        console.warn('⚠️ Avatar bucket does not exist');
-        toast({
-          title: "⚠️ Bucket no encontrado",
-          description: "El bucket 'avatars' no existe. Ejecuta la migración SQL.",
-          variant: "destructive"
-        });
-        showSetupInstructions();
-        return;
+      console.log('📊 Storage configuration:', configData);
+
+      // Actualizar lista de buckets
+      const { data: bucketsData } = await supabase.storage.listBuckets();
+      setBuckets(bucketsData || []);
+
+      // Mostrar resultado según el estado
+      switch (configData.status) {
+        case 'configured':
+          toast({
+            title: "✅ Configuración completa",
+            description: "Storage de avatars está configurado correctamente.",
+          });
+          console.log('✅ Storage is fully configured');
+          break;
+          
+        case 'bucket_only':
+          toast({
+            title: "⚠️ Configuración parcial",
+            description: "Bucket existe pero faltan políticas RLS. Usa AUTO SETUP.",
+            variant: "destructive"
+          });
+          console.log('⚠️ Bucket exists but policies are missing');
+          break;
+          
+        case 'not_configured':
+          toast({
+            title: "❌ No configurado",
+            description: "Storage no está configurado. Usa AUTO SETUP para configurar.",
+            variant: "destructive"
+          });
+          console.log('❌ Storage is not configured');
+          break;
+          
+        case 'error':
+          toast({
+            title: "💥 Error de diagnóstico",
+            description: "Error al verificar configuración. Revisa la consola.",
+            variant: "destructive"
+          });
+          console.log('💥 Error during diagnosis');
+          break;
       }
 
-      console.log('✅ Avatar bucket configuration:', avatarBucket);
-
-      // 3. Verificar permisos intentando listar archivos
-      const { data: files, error: listError } = await supabase.storage
-        .from('avatars')
-        .list('', { limit: 1 });
-
-      if (listError) {
-        console.error('❌ Cannot list avatar files:', listError);
-        toast({
-          title: "❌ Error de permisos",
-          description: "No se puede acceder al bucket. Verifica las políticas RLS.",
-          variant: "destructive"
-        });
-        showSetupInstructions();
-        return;
-      }
-
-      console.log('✅ Avatar bucket is accessible');
-      
-      toast({
-        title: "✅ Diagnóstico exitoso",
-        description: "El almacenamiento está configurado correctamente.",
-      });
+      // Mostrar detalles en consola
+      console.log('📋 Bucket info:', configData.bucket);
+      console.log('📊 Policies count:', configData.policies_count);
 
     } catch (error: any) {
       console.error('💥 Diagnosis failed:', error);
@@ -664,67 +668,31 @@ FOR INSERT WITH CHECK (
     try {
       console.log('🚀 Attempting automatic storage setup...');
       
-      // Intentar ejecutar los comandos SQL directamente
-      const setupQueries = [
-        // Crear bucket
-        `INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-         VALUES (
-           'avatars',
-           'avatars',
-           true,
-           5242880,
-           ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
-         )
-         ON CONFLICT (id) DO NOTHING;`,
-        
-        // Crear política de lectura pública
-        `CREATE POLICY IF NOT EXISTS "Public read access" ON storage.objects 
-         FOR SELECT USING (bucket_id = 'avatars');`,
-        
-        // Crear política de subida para usuarios autenticados
-        `CREATE POLICY IF NOT EXISTS "Authenticated users can upload" ON storage.objects 
-         FOR INSERT WITH CHECK (
-           bucket_id = 'avatars' AND 
-           auth.role() = 'authenticated'
-         );`
-      ];
-
-      let successCount = 0;
-      const results = [];
-
-      for (const query of setupQueries) {
-        try {
-          console.log(`📝 Executing: ${query.substring(0, 50)}...`);
-          const { data, error } = await supabase.rpc('exec_sql', { sql_query: query });
-          
-          if (error) {
-            console.warn(`⚠️ Query failed:`, error.message);
-            results.push({ query: query.substring(0, 30), success: false, error: error.message });
-          } else {
-            console.log(`✅ Query successful`);
-            successCount++;
-            results.push({ query: query.substring(0, 30), success: true });
-          }
-        } catch (queryError: any) {
-          console.warn(`⚠️ Query error:`, queryError.message);
-          results.push({ query: query.substring(0, 30), success: false, error: queryError.message });
-        }
+      // Usar la función SQL especializada para configurar storage
+      const { data, error } = await supabase.rpc('setup_avatars_storage');
+      
+      if (error) {
+        console.error('❌ Setup function failed:', error);
+        throw error;
       }
 
-      console.log(`🎯 Setup completed: ${successCount}/${setupQueries.length} queries successful`);
-      console.log('📊 Results:', results);
+      console.log('✅ Setup function result:', data);
 
-      if (successCount > 0) {
+      if (data.success) {
         // Refresh buckets list
         const { data: newBucketsData } = await supabase.storage.listBuckets();
         setBuckets(newBucketsData || []);
         
         toast({
-          title: "✅ Configuración parcialmente exitosa",
-          description: `${successCount} de ${setupQueries.length} comandos ejecutados correctamente.`,
+          title: "✅ Configuración exitosa",
+          description: "Storage de avatars configurado correctamente. Bucket y políticas creadas.",
         });
+        
+        console.log('🎯 Storage setup completed successfully');
+        console.log('📊 Bucket result:', data.bucket);
+        console.log('📊 Policies result:', data.policies);
       } else {
-        throw new Error('No se pudieron ejecutar los comandos automáticamente');
+        throw new Error(data.error || 'Setup failed');
       }
 
     } catch (error: any) {
