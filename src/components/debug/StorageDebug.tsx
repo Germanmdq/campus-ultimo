@@ -208,84 +208,134 @@ export function StorageDebug() {
 
   const emergencyFixNames = async () => {
     setLoading(true);
+    
     try {
-      console.log('🔧 Starting emergency names fix directly...');
+      console.log('🔧 Starting emergency names fix...');
       
-      // Get all profiles with missing names
+      // Get profiles with missing names using improved query
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, role, created_at')
-        .or('full_name.is.null,full_name.eq.,full_name.eq.Usuario,full_name.eq.Sin nombre');
-
-      if (profilesError) throw profilesError;
+        .or('full_name.is.null,full_name.eq.,full_name.ilike.Usuario,full_name.ilike.Sin nombre');
+    
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
 
       console.log(`👥 Found ${profiles?.length || 0} profiles needing names`);
-
+      
       if (!profiles || profiles.length === 0) {
         toast({
           title: "✅ No names to fix",
-          description: "All profiles already have names!",
+          description: "All profiles already have proper names!",
         });
         return;
       }
 
-      // Get auth users
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-      if (authError) throw authError;
-
-      const authUsersMap = new Map(authUsers?.users?.map(u => [u.id, u]) || []);
-      let fixed = 0;
-
-      // Fix names
-      for (const profile of profiles) {
-        const authUser = authUsersMap.get(profile.id);
-        if (!authUser) continue;
-
-        const meta = authUser.user_metadata || {};
-        const email = authUser.email || '';
-        
-        // Try multiple sources for name
-        let newName = meta.full_name || 
-                     meta.name || 
-                     meta.display_name ||
-                     (meta.first_name && meta.last_name ? `${meta.first_name} ${meta.last_name}` : '') ||
-                     (email ? email.split('@')[0] : 'Usuario');
-
-        // Clean up the name
-        newName = newName.trim();
-        if (newName === '' || newName === 'Usuario' || newName === 'Sin nombre') {
-          newName = email ? email.split('@')[0] : 'Usuario';
-        }
-
-        if (newName && newName !== profile.full_name) {
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ full_name: newName })
-            .eq('id', profile.id);
-
-          if (!updateError) {
-            fixed++;
-            console.log(`✅ Updated ${profile.id}: "${profile.full_name}" → "${newName}"`);
-          }
-        }
+      // Get auth users with better error handling
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+      if (authError) {
+        console.error('❌ Error fetching auth users:', authError);
+        throw authError;
       }
 
-      console.log(`✅ Emergency names fix completed! Updated ${fixed} profiles`);
+      const authUsersMap = new Map(
+        authData?.users?.map(user => [user.id, user]) || []
+      );
+      
+      let fixed = 0;
+      let errors = 0;
+
+      // Process in smaller batches to avoid overwhelming the database
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < profiles.length; i += BATCH_SIZE) {
+        const batch = profiles.slice(i, i + BATCH_SIZE);
+        
+        await Promise.allSettled(
+          batch.map(async (profile) => {
+            try {
+              const authUser = authUsersMap.get(profile.id);
+              if (!authUser) {
+                console.warn(`⚠️ No auth user found for profile ${profile.id}`);
+                return;
+              }
+
+              const newName = extractUserName(authUser);
+              
+              if (newName && newName !== profile.full_name) {
+                const { error: updateError } = await supabase
+                  .from('profiles')
+                  .update({ 
+                    full_name: newName,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', profile.id);
+
+                if (updateError) {
+                  console.error(`❌ Failed to update ${profile.id}:`, updateError);
+                  errors++;
+                } else {
+                  fixed++;
+                  console.log(`✅ Updated ${profile.id}: "${profile.full_name}" → "${newName}"`);
+                }
+              }
+            } catch (error) {
+              console.error(`❌ Error processing profile ${profile.id}:`, error);
+              errors++;
+            }
+          })
+        );
+      }
+
+      console.log(`🎯 Emergency names fix completed! Updated: ${fixed}, Errors: ${errors}`);
       
       toast({
         title: "🚨 EMERGENCY FIX COMPLETE",
-        description: `Fixed ${fixed} user names! Check console for details.`,
+        description: `Fixed ${fixed} names${errors > 0 ? `, ${errors} errors` : ''}`,
+        variant: errors > 0 ? "destructive" : "default"
       });
+
     } catch (error: any) {
       console.error('💥 Emergency names fix error:', error);
       toast({
         title: "💥 Emergency fix failed",
-        description: error.message || "Unknown error",
+        description: error.message || "Unknown error occurred",
         variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to extract user name from auth metadata
+  const extractUserName = (authUser: any): string => {
+    const meta = authUser.user_metadata || {};
+    const email = authUser.email || '';
+    
+    // Priority order for name sources
+    const nameSources = [
+      meta.full_name,
+      meta.name,
+      meta.display_name,
+      meta.first_name && meta.last_name ? `${meta.first_name} ${meta.last_name}` : null,
+      email ? email.split('@')[0] : null
+    ];
+    
+    // Find first valid name
+    for (const source of nameSources) {
+      if (source && typeof source === 'string') {
+        const cleaned = source.trim();
+        if (cleaned && 
+            cleaned !== 'Usuario' && 
+            cleaned !== 'Sin nombre' &&
+            cleaned.length > 0) {
+          return cleaned;
+        }
+      }
+    }
+    
+    return email ? email.split('@')[0] : 'Usuario';
   };
 
   const emergencyFixStorage = async () => {
@@ -417,60 +467,37 @@ export function StorageDebug() {
   const createBucketNow = async () => {
     setLoading(true);
     try {
-      console.log('🔧 Creating avatars bucket directly...');
+      console.log('🔧 Creating avatars bucket via Edge Function...');
       
-      // Check if bucket already exists
-      const { data: existingBuckets, error: listError } = await supabase.storage.listBuckets();
-      if (listError) throw listError;
+      // Call Edge Function to create bucket with service_role
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-avatars-bucket`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create bucket');
+      }
+
+      const data = await response.json();
+      console.log('✅ Bucket creation response:', data);
       
-      const avatarsBucket = existingBuckets?.find(b => b.id === 'avatars');
-      if (avatarsBucket) {
-        console.log('✅ Avatars bucket already exists');
+      if (data.success) {
+        // Refresh buckets list
+        const { data: newBucketsData } = await supabase.storage.listBuckets();
+        setBuckets(newBucketsData || []);
+        
         toast({
-          title: "Bucket already exists",
-          description: "Avatars bucket is already available!"
+          title: "✅ BUCKET CREATED",
+          description: data.message || "Avatars bucket created successfully! Avatar uploads should now work."
         });
-        return;
+      } else {
+        throw new Error(data.error || 'Unknown error');
       }
-      
-      // Create the bucket
-      const { error: createError } = await supabase.storage.createBucket('avatars', {
-        public: true,
-        allowedMimeTypes: ['image/*'],
-        fileSizeLimit: 5242880 // 5MB
-      });
-      
-      if (createError) {
-        console.error('❌ Error creating avatars bucket:', createError);
-        throw createError;
-      }
-      
-      console.log('✅ Avatars bucket created successfully');
-      
-      // Test the bucket by uploading a test file
-      const testFile = new Blob(['test content'], { type: 'text/plain' });
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload('test-bucket-creation.txt', testFile);
-      
-      if (uploadError) {
-        console.error('❌ Test upload failed:', uploadError);
-        throw uploadError;
-      }
-      
-      console.log('✅ Test upload successful:', uploadData);
-      
-      // Clean up test file
-      await supabase.storage.from('avatars').remove(['test-bucket-creation.txt']);
-      
-      // Refresh buckets list
-      const { data: newBucketsData } = await supabase.storage.listBuckets();
-      setBuckets(newBucketsData || []);
-      
-      toast({
-        title: "✅ BUCKET CREATED",
-        description: "Avatars bucket created and tested! Avatar uploads should now work."
-      });
     } catch (error: any) {
       console.error('💥 Bucket creation error:', error);
       toast({

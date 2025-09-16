@@ -29,166 +29,212 @@ export function AvatarUpload({
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
+    // Enhanced file validation
+    const validationResult = validateImageFile(file);
+    if (!validationResult.isValid) {
       toast({
-        title: "Error",
-        description: "Por favor selecciona una imagen válida",
+        title: "Error de validación",
+        description: validationResult.error,
         variant: "destructive"
-      })
-      return
+      });
+      return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "Error", 
-        description: "La imagen debe ser menor a 5MB",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setUploading(true)
+    setUploading(true);
 
     try {
-      // Check and refresh session if needed
-      const sessionValid = await checkAndRefreshSession()
-      if (!sessionValid) {
-        toast({
-          title: "Error de autenticación",
-          description: "Debes estar logueado para subir una foto. Por favor, inicia sesión nuevamente.",
-          variant: "destructive"
-        })
-        return
-      }
+      // Verify authentication
+      const user = await verifyAuthentication();
+      if (!user) return;
 
-      // Get current user
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError || !user) {
-        console.error('Auth error:', authError)
-        toast({
-          title: "Error de autenticación",
-          description: "No se pudo verificar tu identidad. Por favor, inicia sesión nuevamente.",
-          variant: "destructive"
-        })
-        return
-      }
+      console.log('🔐 User authenticated:', user.id);
 
-      console.log('User authenticated:', user.id)
-
-      // Generate unique filename
-      const fileExt = file.name.split('.').pop()
-      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`
-
-      console.log('Attempting upload to avatars bucket...', fileName)
+      // Generate optimized filename
+      const fileName = generateAvatarFileName(file, user.id);
       
-          // Ensure avatars bucket exists
-          console.log('Ensuring avatars bucket exists...')
-          
-          // First check if bucket exists
-          const { data: buckets, error: listError } = await supabase.storage.listBuckets()
-          if (listError) {
-            console.error('Error listing buckets:', listError)
-            throw listError
-          }
-          
-          const avatarsBucket = buckets?.find(b => b.id === 'avatars')
-          if (!avatarsBucket) {
-            console.log('Avatars bucket not found, creating it...')
-            const { error: createError } = await supabase.storage.createBucket('avatars', {
-              public: true,
-              allowedMimeTypes: ['image/*'],
-              fileSizeLimit: 5242880 // 5MB
-            })
-            
-            if (createError) {
-              console.error('Error creating avatars bucket:', createError)
-              throw createError
-            }
-            console.log('Avatars bucket created successfully')
-          } else {
-            console.log('Avatars bucket already exists')
-          }
+      console.log('📤 Attempting upload...', fileName);
+      
+      // Ensure storage bucket is ready
+      await ensureAvatarsBucket();
 
-      // Try to upload directly to avatars bucket
-      const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true // Allow overwriting
-        })
-
-      if (error) {
-        console.error('Upload failed:', error)
-        
-        // If RLS error, try with a simpler filename
-        if (error.message.includes('row-level security') || error.message.includes('policy')) {
-          console.log('RLS error detected, trying with simpler filename...')
-          const simpleFileName = `avatar-${Date.now()}.${fileExt}`
-          
-          const { data: retryData, error: retryError } = await supabase.storage
-            .from('avatars')
-            .upload(simpleFileName, file, {
-              cacheControl: '3600',
-              upsert: true
-            })
-
-          if (retryError) {
-            console.error('Retry upload failed:', retryError)
-            throw retryError
-          }
-
-          const { data: urlData } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(simpleFileName)
-
-          console.log('Retry upload successful:', urlData.publicUrl)
-          onChange?.(urlData.publicUrl)
-          
-          toast({
-            title: "Foto actualizada",
-            description: "Tu foto de perfil fue actualizada exitosamente"
-          })
-          return
-        }
-        
-        throw error
+      // Upload with retry logic
+      const uploadResult = await uploadWithRetry(file, fileName);
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error);
       }
-
-      console.log('Upload successful:', data)
 
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('avatars')
-        .getPublicUrl(fileName)
+        .getPublicUrl(uploadResult.fileName);
 
-      console.log('Public URL:', urlData.publicUrl)
+      console.log('✅ Upload successful:', urlData.publicUrl);
 
-      onChange?.(urlData.publicUrl)
+      // Update UI
+      onChange?.(urlData.publicUrl);
       
       toast({
-        title: "Foto actualizada",
-        description: "Tu foto de perfil fue actualizada exitosamente"
-      })
+        title: "✅ Foto actualizada",
+        description: "Tu foto de perfil fue actualizada exitosamente",
+      });
+
     } catch (error: any) {
-      console.error('Error uploading avatar:', error)
+      console.error('💥 Avatar upload error:', error);
       toast({
-        title: "Error",
-        description: error.message || "No se pudo subir la imagen. Verifica que el almacenamiento esté configurado correctamente.",
+        title: "💥 Error al subir imagen",
+        description: getUploadErrorMessage(error),
         variant: "destructive"
-      })
+      });
     } finally {
-      setUploading(false)
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      setUploading(false);
+      resetFileInput();
+    }
+  };
+
+  // Helper functions for avatar upload
+  const validateImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      return { isValid: false, error: "Solo se permiten archivos de imagen" };
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      return { isValid: false, error: "La imagen debe ser menor a 5MB" };
+    }
+    
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      return { 
+        isValid: false, 
+        error: "Formato no soportado. Usa JPG, PNG, WebP o GIF" 
+      };
+    }
+    
+    return { isValid: true };
+  };
+
+  const verifyAuthentication = async () => {
+    const sessionValid = await checkAndRefreshSession();
+    if (!sessionValid) {
+      toast({
+        title: "🔐 Error de autenticación",
+        description: "Debes estar logueado. Por favor, inicia sesión.",
+        variant: "destructive"
+      });
+      return null;
+    }
+
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
+      toast({
+        title: "🔐 Error de verificación",
+        description: "No se pudo verificar tu identidad. Inicia sesión nuevamente.",
+        variant: "destructive"
+      });
+      return null;
+    }
+    
+    return user;
+  };
+
+  const generateAvatarFileName = (file: File, userId: string): string => {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const timestamp = Date.now();
+    return `avatar-${userId}-${timestamp}.${fileExt}`;
+  };
+
+  const ensureAvatarsBucket = async () => {
+    try {
+      // Check if bucket exists
+      const { data: buckets, error } = await supabase.storage.listBuckets();
+      if (error) throw error;
+      
+      const avatarsBucket = buckets?.find(b => b.id === 'avatars');
+      if (avatarsBucket) {
+        console.log('✅ Avatars bucket exists');
+        return;
+      }
+
+      // Create bucket if it doesn't exist
+      console.log('🪣 Creating avatars bucket...');
+      const { error: createError } = await supabase.storage.createBucket('avatars', {
+        public: true,
+        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+        fileSizeLimit: 5242880 // 5MB
+      });
+      
+      if (createError) throw createError;
+      console.log('✅ Avatars bucket created');
+      
+    } catch (error) {
+      console.warn('⚠️ Bucket check/creation failed, continuing with upload:', error);
+    }
+  };
+
+  const uploadWithRetry = async (file: File, fileName: string, maxRetries = 2) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📤 Upload attempt ${attempt}/${maxRetries}`);
+        
+        const { data, error } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (error) {
+          // Handle RLS issues with simplified filename
+          if ((error.message.includes('row-level security') || 
+               error.message.includes('policy')) && attempt < maxRetries) {
+            console.log('🔄 RLS error, trying simplified filename...');
+            const simpleFileName = `avatar-${Date.now()}.${fileName.split('.').pop()}`;
+            
+            const retryResult = await uploadWithRetry(file, simpleFileName, 1);
+            if (retryResult.success) {
+              return retryResult;
+            }
+          }
+          throw error;
+        }
+
+        return { success: true, fileName, data };
+        
+      } catch (error: any) {
+        console.error(`❌ Upload attempt ${attempt} failed:`, error);
+        
+        if (attempt === maxRetries) {
+          return { success: false, error: error.message };
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
       }
     }
-  }
+    
+    return { success: false, error: "All upload attempts failed" };
+  };
+
+  const getUploadErrorMessage = (error: any): string => {
+    if (error.message?.includes('row-level security')) {
+      return "Error de permisos. Verifica tu configuración de almacenamiento.";
+    }
+    if (error.message?.includes('File size')) {
+      return "La imagen es demasiado grande. Máximo 5MB.";
+    }
+    if (error.message?.includes('network')) {
+      return "Error de conexión. Verifica tu internet e inténtalo de nuevo.";
+    }
+    return error.message || "Error desconocido al subir la imagen.";
+  };
+
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleRemove = () => {
     onChange?.('')
