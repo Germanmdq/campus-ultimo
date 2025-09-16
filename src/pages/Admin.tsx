@@ -428,7 +428,7 @@ export default function Admin() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className={`${isMobile ? 'space-y-4' : 'flex items-center justify-between'}`}>
         <div>
           <h1 className="text-3xl font-bold text-foreground">Panel de Administrador</h1>
           <p className="text-muted-foreground">Gestiona todo el Campus de Geometría Sagrada</p>
@@ -464,20 +464,20 @@ export default function Admin() {
 
       {/* Actividad (solo admin) */}
       <div>
-        <div className="flex items-center justify-between mb-2">
+        <div className={`${isMobile ? 'space-y-4' : 'flex items-center justify-between'} mb-2`}>
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-accent" />
             <h2 className="text-xl font-semibold">Actividad</h2>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-sm">
+          <div className={`flex items-center gap-2 ${isMobile ? 'flex-col' : 'flex-row'}`}>
+            <div className={`flex items-center gap-1 text-sm ${isMobile ? 'flex-col' : 'flex-row'}`}>
               <span>Desde</span>
               <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} className="bg-transparent border rounded px-2 py-1" />
               <span>Hasta</span>
               <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} className="bg-transparent border rounded px-2 py-1" />
               <Button size="sm" variant="outline" onClick={() => fetchActivity(rangeStart, rangeEnd)}>Aplicar</Button>
             </div>
-            <Button variant="outline" size="sm" onClick={exportCsv}>Exportar CSV</Button>
+            <Button variant="outline" size="sm" onClick={exportCsv} className={isMobile ? 'w-full' : ''}>Exportar CSV</Button>
           </div>
         </div>
         {activityLoading ? (
