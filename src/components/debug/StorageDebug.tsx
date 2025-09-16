@@ -658,6 +658,131 @@ FOR INSERT WITH CHECK (
     });
   };
 
+  // 🚀 EJECUTAR CONFIGURACIÓN AUTOMÁTICA VIA SQL
+  const executeAutoSetup = async () => {
+    setLoading(true);
+    try {
+      console.log('🚀 Attempting automatic storage setup...');
+      
+      // Intentar ejecutar los comandos SQL directamente
+      const setupQueries = [
+        // Crear bucket
+        `INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+         VALUES (
+           'avatars',
+           'avatars',
+           true,
+           5242880,
+           ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+         )
+         ON CONFLICT (id) DO NOTHING;`,
+        
+        // Crear política de lectura pública
+        `CREATE POLICY IF NOT EXISTS "Public read access" ON storage.objects 
+         FOR SELECT USING (bucket_id = 'avatars');`,
+        
+        // Crear política de subida para usuarios autenticados
+        `CREATE POLICY IF NOT EXISTS "Authenticated users can upload" ON storage.objects 
+         FOR INSERT WITH CHECK (
+           bucket_id = 'avatars' AND 
+           auth.role() = 'authenticated'
+         );`
+      ];
+
+      let successCount = 0;
+      const results = [];
+
+      for (const query of setupQueries) {
+        try {
+          console.log(`📝 Executing: ${query.substring(0, 50)}...`);
+          const { data, error } = await supabase.rpc('exec_sql', { sql_query: query });
+          
+          if (error) {
+            console.warn(`⚠️ Query failed:`, error.message);
+            results.push({ query: query.substring(0, 30), success: false, error: error.message });
+          } else {
+            console.log(`✅ Query successful`);
+            successCount++;
+            results.push({ query: query.substring(0, 30), success: true });
+          }
+        } catch (queryError: any) {
+          console.warn(`⚠️ Query error:`, queryError.message);
+          results.push({ query: query.substring(0, 30), success: false, error: queryError.message });
+        }
+      }
+
+      console.log(`🎯 Setup completed: ${successCount}/${setupQueries.length} queries successful`);
+      console.log('📊 Results:', results);
+
+      if (successCount > 0) {
+        // Refresh buckets list
+        const { data: newBucketsData } = await supabase.storage.listBuckets();
+        setBuckets(newBucketsData || []);
+        
+        toast({
+          title: "✅ Configuración parcialmente exitosa",
+          description: `${successCount} de ${setupQueries.length} comandos ejecutados correctamente.`,
+        });
+      } else {
+        throw new Error('No se pudieron ejecutar los comandos automáticamente');
+      }
+
+    } catch (error: any) {
+      console.error('💥 Auto setup failed:', error);
+      
+      // Si falla la configuración automática, mostrar instrucciones manuales
+      showManualSetupInstructions();
+      
+      toast({
+        title: "⚠️ Configuración automática falló",
+        description: "Usa las instrucciones manuales en la consola.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 📋 COPIAR COMANDOS SQL AL PORTAPAPELES
+  const copySQLToClipboard = async () => {
+    const sqlCommands = `-- Crear bucket avatars
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'avatars',
+  'avatars',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Crear políticas RLS
+CREATE POLICY "Public read access" ON storage.objects 
+FOR SELECT USING (bucket_id = 'avatars');
+
+CREATE POLICY "Authenticated users can upload" ON storage.objects 
+FOR INSERT WITH CHECK (
+  bucket_id = 'avatars' AND 
+  auth.role() = 'authenticated'
+);`;
+
+    try {
+      await navigator.clipboard.writeText(sqlCommands);
+      toast({
+        title: "📋 Comandos copiados",
+        description: "Los comandos SQL se copiaron al portapapeles. Pégalos en el SQL Editor de Supabase.",
+      });
+      console.log('📋 SQL commands copied to clipboard');
+    } catch (error) {
+      console.error('❌ Failed to copy to clipboard:', error);
+      toast({
+        title: "❌ Error al copiar",
+        description: "No se pudo copiar al portapapeles. Revisa la consola para los comandos.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <Card className="w-full max-w-2xl">
       <CardHeader>
@@ -691,6 +816,12 @@ FOR INSERT WITH CHECK (
               </Button>
               <Button onClick={showSetupInstructions} disabled={loading} className="bg-purple-600 hover:bg-purple-700">
                 📋 SHOW SQL COMMANDS
+              </Button>
+              <Button onClick={executeAutoSetup} disabled={loading} className="bg-orange-600 hover:bg-orange-700">
+                {loading ? 'Setting up...' : '🚀 AUTO SETUP'}
+              </Button>
+              <Button onClick={copySQLToClipboard} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700">
+                📋 COPY SQL
               </Button>
             </div>
           </div>
