@@ -665,7 +665,7 @@ export default function Usuarios() {
                         users
                           .filter(user => 
                             !searchTerm || 
-                            user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             user.email.toLowerCase().includes(searchTerm.toLowerCase())
                           )
                           .map((user) => (
@@ -676,11 +676,11 @@ export default function Usuarios() {
                             >
                               <Avatar className="h-8 w-8">
                                 <AvatarFallback className="text-xs">
-                                  {user.name.charAt(0).toUpperCase()}
+                                  {user.full_name.charAt(0).toUpperCase()}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{user.name}</p>
+                                <p className="font-medium text-sm truncate">{user.full_name}</p>
                                 <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                               </div>
                               <Badge className={getRoleColor(user.role)}>

@@ -31,7 +31,7 @@ export function useUserSearch(options: UseUserSearchOptions = {}) {
     
     return users.slice(0, 10).map(user => ({
       value: user.id,
-      label: user.name,
+      label: user.full_name,
       description: `${user.email} • ${user.role}`
     }));
   }, [users, searchTerm, minSearchLength]);

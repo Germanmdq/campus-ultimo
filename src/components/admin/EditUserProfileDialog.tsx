@@ -53,7 +53,7 @@ export function EditUserProfileDialog({ user, open, onOpenChange, onSuccess }: E
   useEffect(() => {
     if (user && open) {
       form.reset({
-        full_name: user.name || '',
+        full_name: user.full_name || '',
         role: user.role,
         email: user.email || '',
       });

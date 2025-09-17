@@ -696,7 +696,7 @@ export default function Admin() {
                     const s = activeUsersSearch.trim().toLowerCase();
                     if (!s) return true;
                     return (
-                      (u.name || '').toLowerCase().includes(s) ||
+                      (u.full_name || '').toLowerCase().includes(s) ||
                       (u.email || '').toLowerCase().includes(s) ||
                       u.programs.join(', ').toLowerCase().includes(s) ||
                       u.courses.join(', ').toLowerCase().includes(s)

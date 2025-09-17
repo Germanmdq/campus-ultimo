@@ -518,7 +518,7 @@ export function StorageDebug() {
 
       console.log('✅ Usuarios mapeados:');
       mappedUsers?.forEach(user => {
-        console.log(`  - ${user.id}: "${user.name}" (${user.email})`);
+        console.log(`  - ${user.id}: "${user.full_name}" (${user.email})`);
       });
 
       // 4. Verificar datos específicos que podrían estar causando problemas
@@ -573,17 +573,17 @@ export function StorageDebug() {
 
       console.log('📊 Resultado del procesamiento:');
       processedUsers?.forEach((user, index) => {
-        console.log(`${index + 1}. ${user.name} (${user.email}) - Rol: ${user.role}`);
+        console.log(`${index + 1}. ${user.full_name} (${user.email}) - Rol: ${user.role}`);
       });
 
       // Verificar si hay usuarios sin nombres
       const usersWithoutNames = processedUsers?.filter(user => 
-        !user.name || user.name === 'Usuario' || user.name === ''
+        !user.full_name || user.full_name === 'Usuario' || user.full_name === ''
       );
 
       console.log(`\n🎯 Usuarios sin nombres: ${usersWithoutNames?.length || 0}`);
       usersWithoutNames?.forEach(user => {
-        console.log(`  - ${user.email} → "${user.name}"`);
+        console.log(`  - ${user.email} → "${user.full_name}"`);
       });
 
     } catch (error) {
