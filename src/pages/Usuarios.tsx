@@ -21,6 +21,7 @@ import { useUserSearch } from '@/hooks/useUserSearch';
 interface User {
   id: string;
   name: string;
+  full_name: string;
   email: string;
   role: 'student' | 'formador' | 'voluntario' | 'admin';
   status: 'active' | 'inactive';
@@ -139,6 +140,7 @@ export default function Usuarios() {
           const arr: User[] = (json.data.users || []).map((u: any) => ({
             id: u.id,
             name: (u.full_name && String(u.full_name).trim()) ? u.full_name : (u.email ? u.email.split('@')[0] : 'Sin nombre'),
+            full_name: u.full_name || (u.email ? u.email.split('@')[0] : 'Sin nombre'),
             email: u.email || 'Sin email',
             role: (u.role === 'teacher' ? 'formador' : (u.role || 'student')) as 'student' | 'formador' | 'voluntario' | 'admin',
             status: 'active',
@@ -176,6 +178,7 @@ export default function Usuarios() {
       const arr: User[] = paginated.map((u: any) => ({
         id: u.id,
         name: (u.full_name && String(u.full_name).trim()) ? u.full_name : (u.email ? u.email.split('@')[0] : 'Sin nombre'),
+        full_name: u.full_name || (u.email ? u.email.split('@')[0] : 'Sin nombre'),
         email: u.email || 'Sin email',
         role: (u.role === 'teacher' ? 'formador' : (u.role || 'student')) as 'student' | 'formador' | 'voluntario' | 'admin',
         status: 'active',
@@ -546,12 +549,12 @@ export default function Usuarios() {
                 <div key={user.id} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50">
                   <Avatar className="h-10 w-10">
                     <AvatarFallback>
-                      {user.name.charAt(0).toUpperCase()}
+                      {(user.full_name || 'U').charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="font-medium truncate">{user.name}</p>
+                      <p className="font-medium truncate">{user.full_name}</p>
                       <Badge className={getRoleColor(user.role)}>
                         {getRoleLabel(user.role)}
                       </Badge>

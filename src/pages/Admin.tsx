@@ -61,7 +61,7 @@ export default function Admin() {
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [showActiveUsers, setShowActiveUsers] = useState(false);
   const [activeUsersLoading, setActiveUsersLoading] = useState(false);
-  const [activeUsersDetails, setActiveUsersDetails] = useState<Array<{ id: string; name: string; email: string; role: string; programs: string[]; courses: string[] }>>([]);
+  const [activeUsersDetails, setActiveUsersDetails] = useState<Array<{ id: string; name: string; full_name: string; email: string; role: string; programs: string[]; courses: string[] }>>([]);
   const [activeUsersSearch, setActiveUsersSearch] = useState('');
   const [activityDialogTitle, setActivityDialogTitle] = useState('Usuarios');
   const [activeUsersRoleFilter, setActiveUsersRoleFilter] = useState<'todos' | 'student' | 'teacher' | 'admin' | 'voluntario'>('todos');
@@ -70,9 +70,9 @@ export default function Admin() {
     const headers = ['nombre','email','programas','cursos'];
     const search = activeUsersSearch.trim().toLowerCase();
     const rows = activeUsersDetails
-      .filter(u => !search || (u.name?.toLowerCase().includes(search) || u.email?.toLowerCase().includes(search) || u.programs.join(', ').toLowerCase().includes(search) || u.courses.join(', ').toLowerCase().includes(search)))
+      .filter(u => !search || (u.full_name?.toLowerCase().includes(search) || u.email?.toLowerCase().includes(search) || u.programs.join(', ').toLowerCase().includes(search) || u.courses.join(', ').toLowerCase().includes(search)))
       .map(u => ({
-        nombre: u.name || '',
+        nombre: u.full_name || '',
         email: u.email || '',
         programas: u.programs.join(' | '),
         cursos: u.courses.join(' | '),
@@ -186,6 +186,7 @@ export default function Admin() {
       const details = ids.map((id) => ({
         id,
         name: byId[id]?.full_name || byId[id]?.email || '—',
+        full_name: byId[id]?.full_name || byId[id]?.email || '—',
         email: byId[id]?.email || '—',
         role: byId[id]?.role || 'student',
         programs: (programsByUser[id] || []).slice(0, 5),
@@ -231,7 +232,7 @@ export default function Admin() {
       // Distinct users in individual courses (active) - Only count if courses exist
       let usersInIndividual = 0;
       if (courseCount && courseCount > 0) {
-        const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
+      const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
         usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
       }
 
@@ -749,7 +750,7 @@ export default function Admin() {
                   const s = activeUsersSearch.trim().toLowerCase();
                   if (!s) return true;
                   return (
-                    (u.name || '').toLowerCase().includes(s) ||
+                    (u.full_name || '').toLowerCase().includes(s) ||
                     (u.email || '').toLowerCase().includes(s) ||
                     u.programs.join(', ').toLowerCase().includes(s) ||
                     u.courses.join(', ').toLowerCase().includes(s)
@@ -759,7 +760,7 @@ export default function Admin() {
                 <div key={u.id} className="p-3 border rounded-md">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium">{u.name}</div>
+                      <div className="font-medium">{u.full_name}</div>
                       <div className="text-sm text-muted-foreground">{u.email}</div>
                     </div>
                     <Button size="sm" variant="outline" onClick={() => { setSelectedUserId(u.id); setShowUserProfile(true); }}>
