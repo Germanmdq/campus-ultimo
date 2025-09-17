@@ -30,6 +30,24 @@ export default function Cuenta() {
     loadSessions();
   }, [profile?.full_name, profile?.avatar_url]);
 
+  // Cargar avatar desde la BD al montar el componente
+  useEffect(() => {
+    const loadAvatar = async () => {
+      if (user?.id) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('avatar_url')
+          .eq('id', user.id)
+          .single();
+        
+        if (!error && data?.avatar_url) {
+          setAvatarUrl(data.avatar_url);
+        }
+      }
+    };
+    loadAvatar();
+  }, [user?.id]);
+
   const handleAvatarChange = async (newAvatarUrl: string) => {
     setAvatarUrl(newAvatarUrl);
     
