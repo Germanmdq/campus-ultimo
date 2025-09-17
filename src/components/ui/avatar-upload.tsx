@@ -108,9 +108,25 @@ export function AvatarUpload({
       // 4. Actualizar UI
       onChange?.(uploadResult.publicUrl);
       
+      // 5. Guardar en la base de datos
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: uploadResult.publicUrl })
+        .eq('id', user.id);
+
+      if (dbError) {
+        console.error('Error saving avatar URL to database:', dbError);
+        toast({
+          title: "⚠️ Foto subida pero no guardada",
+          description: "La foto se subió pero no se guardó en tu perfil",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       toast({
         title: "✅ ¡Foto actualizada!",
-        description: "Tu avatar se subió correctamente",
+        description: "Tu avatar se subió y guardó correctamente",
       });
 
     } catch (error: any) {
