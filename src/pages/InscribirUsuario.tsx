@@ -185,6 +185,38 @@ export default function InscribirUsuario() {
           .upsert(programEnrollments, { onConflict: 'user_id,program_id' });
 
         if (programError) throw programError;
+
+        // Inscribir automáticamente en todos los cursos de los programas seleccionados
+        for (const programId of selectedPrograms) {
+          // Obtener todos los cursos del programa
+          const { data: programCourses, error: coursesError } = await supabase
+            .from('program_courses')
+            .select('course_id')
+            .eq('program_id', programId);
+
+          if (coursesError) {
+            console.warn(`Error getting courses for program ${programId}:`, coursesError);
+            continue;
+          }
+
+          if (programCourses && programCourses.length > 0) {
+            // Crear inscripciones en course_enrollments para cada curso del programa
+            const courseEnrollments = programCourses.map(pc => ({
+              user_id: userId,
+              course_id: pc.course_id,
+              status: 'active' as const,
+              progress_percent: 0
+            }));
+
+            const { error: courseEnrollmentError } = await supabase
+              .from('course_enrollments')
+              .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+
+            if (courseEnrollmentError) {
+              console.warn(`Error enrolling in courses for program ${programId}:`, courseEnrollmentError);
+            }
+          }
+        }
       }
 
       // Inscribir en cursos

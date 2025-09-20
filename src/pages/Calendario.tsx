@@ -50,7 +50,6 @@ export default function Calendario() {
       
       if (error) throw error;
       
-      console.log('Old events cleaned up successfully');
     } catch (error) {
       console.error('Error cleaning up old events:', error);
     }

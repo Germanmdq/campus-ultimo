@@ -102,17 +102,11 @@ export default function Auth() {
       <div className="w-full max-w-[calc(42rem-10px)]">
         <div className="text-center mb-8">
           <img src="/Logo-email.png" alt="Geometría Sagrada" className="h-20 w-auto object-contain mx-auto mb-4" />
-          <p className="text-muted-foreground">
-            Accede a tu cuenta para continuar
-          </p>
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Iniciar Sesión</CardTitle>
-            <CardDescription>
-              Ingresa tus credenciales para acceder a la plataforma
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {magicLinkSent ? (

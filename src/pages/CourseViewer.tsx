@@ -84,14 +84,21 @@ export default function CourseViewer() {
 
       if (courseError) throw courseError;
 
-      // Fetch lessons for this course using the actual course ID
-      const { data: lessonsData, error: lessonsError } = await supabase
-        .from('lessons')
-        .select('*')
-        .eq('course_id', courseData.id)
-        .order('sort_order');
+      // Fetch lessons for this course using lesson_courses (many-to-many)
+      const { data: lessonCoursesData, error: lessonsError } = await supabase
+        .from('lesson_courses')
+        .select(`
+          lessons (*)
+        `)
+        .eq('course_id', courseData.id);
 
       if (lessonsError) throw lessonsError;
+
+      // Extract and sort lessons
+      const lessonsData = (lessonCoursesData || [])
+        .map(lc => lc.lessons)
+        .filter(Boolean)
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
       // Fetch user progress if logged in
       let progressData = [];

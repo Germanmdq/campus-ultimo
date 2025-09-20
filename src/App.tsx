@@ -32,7 +32,6 @@ import InscribirUsuario from "./pages/InscribirUsuario";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import EmailTest from "./pages/EmailTest";
-import ProfileDiagnostics from "./components/debug/ProfileDiagnostics";
 
 const queryClient = new QueryClient();
 
@@ -70,7 +69,6 @@ const App = () => (
               <Route path="/slack" element={<AppLayout><Slack /></AppLayout>} />
               <Route path="/cuenta" element={<AppLayout><Cuenta /></AppLayout>} />
               <Route path="/test-email" element={<AppLayout><EmailTest /></AppLayout>} />
-              <Route path="/diagnostico-perfiles" element={<AppLayout><ProfileDiagnostics /></AppLayout>} />
               
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

@@ -14,7 +14,6 @@ export function useRefreshSession() {
         console.error('Error refreshing session:', error);
         throw error;
       }
-      console.log('Session refreshed successfully');
       return data;
     } catch (error: any) {
       console.error('Failed to refresh session:', error);
@@ -38,7 +37,6 @@ export function useRefreshSession() {
       }
 
       if (!session) {
-        console.log('No active session found');
         return false;
       }
 
@@ -49,7 +47,6 @@ export function useRefreshSession() {
       const fiveMinutes = 5 * 60 * 1000;
 
       if (timeUntilExpiry < fiveMinutes) {
-        console.log('Session expiring soon, refreshing...');
         await refreshSession();
         return true;
       }

@@ -49,7 +49,6 @@ const getNavigationItems = (role: string) => {
     // Acceso directo a la actividad del admin
     baseItems.push({ title: "Actividad", url: "/admin", icon: Activity });
     baseItems.push({ title: "Usuarios", url: "/usuarios", icon: Users });
-    baseItems.push({ title: "Diagnóstico Perfiles", url: "/diagnostico-perfiles", icon: Bug });
   }
 
   // Estudiante: solo 'Mi Formación'

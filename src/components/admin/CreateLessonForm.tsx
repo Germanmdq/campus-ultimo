@@ -140,13 +140,13 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
     try {
       const base = generateSlug(title.trim());
       const uniqueSlug = await ensureUniqueLessonSlug(base, courseId);
+      // 1. Crear la lección SIN course_id (usar sistema many-to-many)
       const { data, error } = await supabase
         .from('lessons')
         .insert([{
           title: title.trim(),
           description: description.trim() || null,
           slug: uniqueSlug,
-          course_id: courseId,
           video_url: videoUrl.trim() || null,
           duration_minutes: duration ? parseInt(duration) : 0,
           has_assignment: hasAssignment,
@@ -161,6 +161,16 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
         .single();
 
       if (error) throw error;
+
+      // 2. Crear la relación en lesson_courses (many-to-many)
+      const { error: relationError } = await supabase
+        .from('lesson_courses')
+        .insert([{
+          lesson_id: data.id,
+          course_id: courseId
+        }]);
+
+      if (relationError) throw relationError;
 
       toast({
         title: "Lección creada",

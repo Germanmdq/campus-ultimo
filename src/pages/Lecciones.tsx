@@ -54,7 +54,7 @@ export default function Lecciones() {
     if (!isTeacherOrAdmin) return;
     setLoading(true);
     try {
-      // Traer lecciones con su curso y programa asociado por FK directa
+      // Traer lecciones con su curso y programa asociado usando lesson_courses (many-to-many)
       const { data: lessonsData, error } = await supabase
         .from('lessons')
         .select(`
@@ -65,10 +65,12 @@ export default function Lecciones() {
           duration_minutes,
           has_assignment,
           requires_admin_approval,
-          courses:course_id (
-            id,
-            title,
-            program:programs ( title )
+          lesson_courses (
+            courses (
+              id,
+              title,
+              programs ( title )
+            )
           )
         `)
         .order('sort_order');
@@ -76,9 +78,11 @@ export default function Lecciones() {
 
       const grouped: GroupedLesson[] = [];
       for (const l of (lessonsData || []) as any[]) {
-        const courseId = l.courses?.id || 'sin-curso';
-        const courseTitle = l.courses?.title || 'Sin curso asignado';
-        const programTitle = l.courses?.program?.title || 'Sin programa';
+        // Obtener el primer curso asociado (puede haber múltiples)
+        const firstCourse = l.lesson_courses?.[0]?.courses;
+        const courseId = firstCourse?.id || 'sin-curso';
+        const courseTitle = firstCourse?.title || 'Sin curso asignado';
+        const programTitle = firstCourse?.programs?.title || 'Sin programa';
         const lesson: Lesson = {
           id: l.id,
           title: l.title,

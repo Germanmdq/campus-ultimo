@@ -25,6 +25,20 @@ interface ForumPost {
   created_at: string;
   author_id: string;
   forum_id?: string;
+  likes_count?: number;
+  replies_count?: number;
+  is_liked?: boolean;
+  author_name?: string;
+  author_role?: string;
+  files?: ForumPostFile[];
+}
+
+interface ForumPostFile {
+  id: string;
+  file_url: string;
+  file_name: string;
+  file_type: string;
+  file_size?: number;
 }
 
 interface Forum {
@@ -60,6 +74,8 @@ export default function Comunidad() {
     category: '',
     forum_id: ''
   });
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [newForum, setNewForum] = useState({
     name: '',
     description: '',
@@ -67,8 +83,11 @@ export default function Comunidad() {
   });
   const [editingForum, setEditingForum] = useState<Forum | null>(null);
   const [showEditForum, setShowEditForum] = useState(false);
+  const [showReplies, setShowReplies] = useState<{ [postId: string]: boolean }>({});
+  const [newReply, setNewReply] = useState<{ [postId: string]: string }>({});
+  const [replies, setReplies] = useState<{ [postId: string]: any[] }>({});
 
-  const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
+  const isTeacherOrAdmin = profile?.role === 'teacher' || profile?.role === 'admin';
 
   useEffect(() => {
     fetchPosts();
@@ -89,14 +108,51 @@ export default function Comunidad() {
           pinned,
           created_at,
           author_id,
-          forum_id
+          forum_id,
+          profiles!forum_posts_author_id_fkey (
+            full_name,
+            role
+          ),
+          forum_post_likes (
+            id,
+            user_id
+          ),
+          forum_post_replies (
+            id
+          ),
+          forum_post_files (
+            id,
+            file_url,
+            file_name,
+            file_type,
+            file_size
+          )
         `)
         .order('pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setPosts(data || []);
+      if (error) {
+        console.error('Error fetching posts:', error);
+        throw error;
+      }
+      
+      // Filtrar posts que tienen autor válido (limpiar datos huérfanos)
+      const validPosts = (data || []).filter((post: any) => post.profiles);
+      
+      // Procesar los datos para incluir conteos y estado de like
+      const processedPosts = validPosts.map((post: any) => ({
+        ...post,
+        author_name: post.profiles?.full_name || 'Usuario',
+        author_role: post.profiles?.role || 'student',
+        likes_count: post.forum_post_likes?.length || 0,
+        replies_count: post.forum_post_replies?.length || 0,
+        is_liked: user ? post.forum_post_likes?.some((like: any) => like.user_id === user.id) : false,
+        files: post.forum_post_files || []
+      }));
+      
+      setPosts(processedPosts);
     } catch (error: any) {
+      console.error('Error in fetchPosts:', error);
       toast({
         title: "Error", 
         description: "No se pudieron cargar las publicaciones",
@@ -108,18 +164,37 @@ export default function Comunidad() {
   };
 
   const fetchForums = async () => {
-    const { data } = await supabase
-      .from('forums')
-      .select(`
-        id,
-        name,
-        description,
-        program_id,
-        programs (title)
-      `)
-      .order('name');
-    
-    setForums(data || []);
+    try {
+      const { data, error } = await supabase
+        .from('forums')
+        .select(`
+          id,
+          name,
+          description,
+          program_id,
+          programs (title)
+        `)
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching forums:', error);
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los foros",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setForums(data || []);
+    } catch (error) {
+      console.error('Error in fetchForums:', error);
+      toast({
+        title: "Error",
+        description: "Error al cargar los foros",
+        variant: "destructive",
+      });
+    }
   };
 
   const fetchPrograms = async () => {
@@ -132,10 +207,95 @@ export default function Comunidad() {
     setPrograms(data || []);
   };
 
-  const handleCreatePost = async () => {
-    console.log('Trying to create post:', newPost);
-    console.log('User:', user);
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    const validFiles = files.filter(file => {
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/webm', 'application/pdf'];
+      
+      if (file.size > maxSize) {
+        toast({
+          title: "Archivo muy grande",
+          description: `${file.name} es muy grande. Máximo 10MB`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      if (!validTypes.includes(file.type)) {
+        toast({
+          title: "Tipo de archivo no válido",
+          description: `${file.name} no es un tipo de archivo válido`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      return true;
+    });
     
+    setSelectedFiles(prev => [...prev, ...validFiles]);
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadFiles = async (postId: string) => {
+    if (selectedFiles.length === 0) return [];
+
+    setUploadingFiles(true);
+    const uploadedFiles = [];
+
+    for (const file of selectedFiles) {
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `forum-files/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('forum-files')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('forum-files')
+          .getPublicUrl(filePath);
+
+        const { error: dbError } = await supabase
+          .from('forum_post_files')
+          .insert([{
+            post_id: postId,
+            file_url: publicUrl,
+            file_name: file.name,
+            file_type: file.type,
+            file_size: file.size
+          }]);
+
+        if (dbError) throw dbError;
+
+        uploadedFiles.push({
+          file_url: publicUrl,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size
+        });
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        toast({
+          title: "Error subiendo archivo",
+          description: `No se pudo subir ${file.name}`,
+          variant: "destructive",
+        });
+      }
+    }
+
+    setUploadingFiles(false);
+    return uploadedFiles;
+  };
+
+  const handleCreatePost = async () => {
     if (!newPost.title.trim() || !newPost.content.trim()) {
       toast({
         title: "Error",
@@ -164,8 +324,6 @@ export default function Comunidad() {
         pinned: false
       };
 
-      console.log('Inserting post data:', postData);
-
       const { data, error } = await supabase
         .from('forum_posts')
         .insert([postData])
@@ -176,7 +334,10 @@ export default function Comunidad() {
         throw error;
       }
 
-      console.log('Post created successfully:', data);
+      // Subir archivos si hay alguno
+      if (selectedFiles.length > 0) {
+        await uploadFiles(data[0].id);
+      }
 
       // Mostrar el foro asociado en el toast si existe
       const forumName = newPost.forum_id ? 
@@ -190,6 +351,7 @@ export default function Comunidad() {
       });
 
       setNewPost({ title: '', content: '', category: '', forum_id: '' });
+      setSelectedFiles([]);
       setShowCreateDialog(false);
       fetchPosts();
     } catch (error: any) {
@@ -257,7 +419,7 @@ export default function Comunidad() {
     if (!editingForum || !newForum.name.trim() || newForum.program_ids.length === 0) {
       toast({
         title: "Error",
-        description: "Por favor completa todos los campos requeridos",
+        description: "Nombre del foro y al menos un programa son obligatorios",
         variant: "destructive",
       });
       return;
@@ -269,65 +431,82 @@ export default function Comunidad() {
         .update({
           name: newForum.name.trim(),
           description: newForum.description.trim() || null,
-          program_id: newForum.program_ids[0] // Solo el primer programa para edición
+          program_id: newForum.program_ids[0]
         })
         .eq('id', editingForum.id);
 
       if (error) throw error;
 
-      setEditingForum(null);
-      setNewForum({ name: '', description: '', program_ids: [] });
-      setShowEditForum(false);
-      fetchForums();
-      
       toast({
         title: "Foro actualizado",
-        description: "El foro fue actualizado exitosamente",
+        description: `El foro "${newForum.name}" ha sido actualizado exitosamente`,
       });
+
+      setNewForum({ name: '', description: '', program_ids: [] });
+      setEditingForum(null);
+      setShowEditForum(false);
+      fetchForums();
     } catch (error: any) {
-      console.error('Error updating forum:', error);
       toast({
         title: "Error",
-        description: error.message || "No se pudo actualizar el foro",
+        description: `No se pudo actualizar el foro: ${error.message}`,
         variant: "destructive",
       });
     }
   };
 
-  const handleDeleteForum = async (forumId: string) => {
-    const forum = forums.find(f => f.id === forumId);
-    if (!forum) return;
 
-    if (!confirm(`¿Estás seguro de que quieres eliminar el foro "${forum.name}"? Esta acción no se puede deshacer.`)) {
+  const handleDeleteForum = async (forum: Forum) => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar el foro "${forum.name}"? Esta acción eliminará también todos los posts del foro y no se puede deshacer.`)) {
       return;
     }
 
     try {
-      const { error } = await supabase
+      // 1. Primero eliminar todos los posts del foro (esto eliminará automáticamente likes, replies y files por CASCADE)
+      const { error: postsError } = await supabase
+        .from('forum_posts')
+        .delete()
+        .eq('forum_id', forum.id);
+
+      if (postsError) throw postsError;
+
+      // 2. Luego eliminar el foro
+      const { error: forumError } = await supabase
         .from('forums')
         .delete()
-        .eq('id', forumId);
+        .eq('id', forum.id);
 
-      if (error) throw error;
+      if (forumError) throw forumError;
 
-      fetchForums();
-      
       toast({
         title: "Foro eliminado",
-        description: "El foro fue eliminado exitosamente",
+        description: `El foro "${forum.name}" y todos sus posts han sido eliminados exitosamente`,
       });
+
+      // Actualizar las listas
+      fetchForums();
+      fetchPosts();
     } catch (error: any) {
       console.error('Error deleting forum:', error);
       toast({
         title: "Error",
-        description: error.message || "No se pudo eliminar el foro",
+        description: `No se pudo eliminar el foro: ${error.message}`,
         variant: "destructive",
       });
     }
   };
 
+
+
   const handleLikePost = async (postId: string) => {
-    if (!user) return;
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "Debes estar autenticado para dar like",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       // Verificar si ya le dio like
@@ -340,22 +519,27 @@ export default function Comunidad() {
 
       if (existingLike) {
         // Quitar like
-        await supabase
+        const { error } = await supabase
           .from('forum_post_likes')
           .delete()
           .eq('id', existingLike.id);
+        
+        if (error) throw error;
       } else {
         // Agregar like
-        await supabase
+        const { error } = await supabase
           .from('forum_post_likes')
           .insert([{
             post_id: postId,
             user_id: user.id
           }]);
+        
+        if (error) throw error;
       }
 
       fetchPosts();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error toggling like:', error);
       toast({
         title: "Error",
         description: "No se pudo actualizar el like",
@@ -364,11 +548,125 @@ export default function Comunidad() {
     }
   };
 
+  const fetchReplies = async (postId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('forum_post_replies')
+        .select(`
+          id,
+          content,
+          created_at,
+          author_id,
+          profiles!forum_post_replies_author_id_fkey (
+            full_name,
+            role
+          )
+        `)
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Filtrar comentarios que tienen autor válido (limpiar datos huérfanos)
+      const validReplies = (data || []).filter((reply: any) => reply.profiles);
+      
+      const processedReplies = validReplies.map((reply: any) => ({
+        ...reply,
+        author_name: reply.profiles?.full_name || 'Usuario',
+        author_role: reply.profiles?.role || 'student'
+      }));
+
+      setReplies(prev => ({
+        ...prev,
+        [postId]: processedReplies
+      }));
+    } catch (error: any) {
+      console.error('Error fetching replies:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los comentarios",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddReply = async (postId: string) => {
+    const replyContent = newReply[postId]?.trim();
+    if (!replyContent) {
+      toast({
+        title: "Error",
+        description: "Por favor escribe un comentario",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "Debes estar autenticado para comentar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('forum_post_replies')
+        .insert([{
+          post_id: postId,
+          author_id: user.id,
+          content: replyContent
+        }]);
+
+      if (error) throw error;
+
+      setNewReply(prev => ({
+        ...prev,
+        [postId]: ''
+      }));
+
+      // Actualizar comentarios y conteo de posts
+      fetchReplies(postId);
+      fetchPosts();
+      
+      toast({
+        title: "Comentario agregado",
+        description: "Tu comentario ha sido publicado",
+      });
+    } catch (error: any) {
+      console.error('Error adding reply:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo agregar el comentario",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleReplies = (postId: string) => {
+    setShowReplies(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+
+    // Cargar comentarios si no están cargados
+    if (!replies[postId]) {
+      fetchReplies(postId);
+    }
+  };
+
   const filteredPosts = posts.filter(post => {
+    // Filtrar posts huérfanos (sin autor válido)
+    if (!post.author_name || post.author_name === 'Sin nombre') {
+      return false;
+    }
+    
     const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          post.content.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'todos' || post.category === filterCategory;
     const matchesForum = !selectedForumId || post.forum_id === selectedForumId;
+    
     return matchesSearch && matchesCategory && matchesForum;
   });
 
@@ -377,7 +675,16 @@ export default function Comunidad() {
   };
 
   const formatDate = (dateString: string) => {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true, locale: es });
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+      }
+      return formatDistanceToNow(date, { addSuffix: true, locale: es });
+    } catch (error) {
+      console.error('Error formatting date:', dateString, error);
+      return 'Fecha inválida';
+    }
   };
 
   if (loading) {
@@ -533,9 +840,61 @@ export default function Comunidad() {
                   />
                 </div>
 
+                <div>
+                  <Label htmlFor="files">Archivos (opcional)</Label>
+                  <div className="space-y-2">
+                    <Input
+                      id="files"
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,.pdf"
+                      onChange={handleFileSelect}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Puedes subir imágenes, videos o PDFs. Máximo 10MB por archivo.
+                    </p>
+                    
+                    {selectedFiles.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Archivos seleccionados:</p>
+                        {selectedFiles.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">{file.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                              </span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removeFile(index)}
+                              className="h-6 w-6 p-0"
+                            >
+                              ×
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
-                  <Button onClick={handleCreatePost} className="flex-1">
-                    Publicar
+                  <Button 
+                    onClick={handleCreatePost} 
+                    className="flex-1"
+                    disabled={uploadingFiles}
+                  >
+                    {uploadingFiles ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Subiendo archivos...
+                      </>
+                    ) : (
+                      'Publicar'
+                    )}
                   </Button>
                   <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
                     Cancelar
@@ -572,6 +931,7 @@ export default function Comunidad() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {forums.map(forum => {
                 const forumPosts = posts.filter(post => post.forum_id === forum.id);
+                const totalPosts = forumPosts.length;
                 return (
                   <Card key={forum.id} className={`border hover:shadow-md transition-all cursor-pointer ${
                     selectedForumId === forum.id ? 'border-accent bg-accent/5' : ''
@@ -581,7 +941,7 @@ export default function Comunidad() {
                         <h4 className="font-semibold text-foreground">{forum.name}</h4>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className="text-xs">
-                            {forumPosts.length} posts
+                            {totalPosts} {totalPosts === 1 ? 'post' : 'posts'}
                           </Badge>
                           {isTeacherOrAdmin && (
                             <div className="flex gap-1">
@@ -601,7 +961,7 @@ export default function Comunidad() {
                                 variant="ghost"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDeleteForum(forum.id);
+                                  handleDeleteForum(forum);
                                 }}
                                 className="h-6 w-6 p-0 text-destructive hover:text-destructive"
                               >
@@ -640,7 +1000,7 @@ export default function Comunidad() {
                             }
                           }}
                         >
-                          {selectedForumId === forum.id ? 'Ver todas' : 'Ver mensajes'}
+                          {selectedForumId === forum.id ? 'Ocultar mensajes' : 'Ver mensajes'}
                         </Button>
                       </div>
                     </CardContent>
@@ -718,7 +1078,7 @@ export default function Comunidad() {
               </p>
               {!searchTerm && filterCategory === 'todos' && (
                 <Button onClick={() => setShowCreateDialog(true)}>
-                  Crear Primera Publicación
+                  Crear Publicación
                 </Button>
               )}
             </CardContent>
@@ -751,8 +1111,12 @@ export default function Comunidad() {
                     
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-sm text-muted-foreground">
-                        por Usuario
+                        por {post.author_name || 'Usuario'}
                       </span>
+                      <Badge variant="outline" className="text-xs">
+                        {post.author_role === 'teacher' ? 'Profesor' : 
+                         post.author_role === 'admin' ? 'Admin' : 'Estudiante'}
+                      </Badge>
                       {post.category && (
                         <Badge variant="secondary" className="text-xs">
                           {post.category}
@@ -764,29 +1128,117 @@ export default function Comunidad() {
                       {post.content}
                     </p>
                     
+                    {/* Mostrar archivos adjuntos */}
+                    {post.files && post.files.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-sm font-medium text-muted-foreground mb-2">Archivos adjuntos:</p>
+                        <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                          {post.files.map((file: ForumPostFile) => (
+                            <div key={file.id} className="flex items-center gap-2 p-2 bg-muted rounded">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm truncate">{file.file_name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {file.file_size ? `${(file.file_size / 1024 / 1024).toFixed(2)} MB` : ''}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => window.open(file.file_url, '_blank')}
+                                className="h-6 w-6 p-0"
+                              >
+                                ↗
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="flex items-center gap-4">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleLikePost(post.id)}
-                        className="gap-1 text-muted-foreground hover:text-foreground"
+                        className={`gap-1 ${post.is_liked ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}
                       >
-                        <Heart className="h-4 w-4" />
-                        <span>0</span>
+                        <Heart className={`h-4 w-4 ${post.is_liked ? 'fill-current' : ''}`} />
+                        <span>{post.likes_count || 0}</span>
                       </Button>
                       
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => toggleReplies(post.id)}
                         className="gap-1 text-muted-foreground hover:text-foreground"
                       >
                         <MessageCircle className="h-4 w-4" />
-                        <span>0</span>
+                        <span>{post.replies_count || 0}</span>
                       </Button>
                     </div>
                   </div>
                 </div>
               </CardContent>
+              
+              {/* Sección de comentarios */}
+              {showReplies[post.id] && (
+                <div className="border-t bg-muted/30 p-4">
+                  <div className="space-y-4">
+                    {/* Lista de comentarios */}
+                    {replies[post.id]?.map((reply: any) => (
+                      <div key={reply.id} className="flex gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="bg-accent text-accent-foreground text-xs">
+                            {reply.author_name?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium">{reply.author_name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {reply.author_role === 'teacher' ? 'Profesor' : 
+                               reply.author_role === 'admin' ? 'Admin' : 'Estudiante'}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(reply.created_at)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-foreground">{reply.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Formulario para nuevo comentario */}
+                    <div className="flex gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-accent text-accent-foreground text-xs">
+                          {profile?.full_name?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 space-y-2">
+                        <Textarea
+                          placeholder="Escribe un comentario..."
+                          value={newReply[post.id] || ''}
+                          onChange={(e) => setNewReply(prev => ({
+                            ...prev,
+                            [post.id]: e.target.value
+                          }))}
+                          className="min-h-[60px]"
+                        />
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            onClick={() => handleAddReply(post.id)}
+                            disabled={!newReply[post.id]?.trim()}
+                          >
+                            Comentar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </Card>
           ))
         )}
@@ -822,7 +1274,10 @@ export default function Comunidad() {
 
             <div>
               <Label htmlFor="edit-forum-program">Programa</Label>
-              <Select value={newForum.program_id} onValueChange={(value) => setNewForum({ ...newForum, program_id: value })}>
+              <Select 
+                value={newForum.program_ids[0] || ''} 
+                onValueChange={(value) => setNewForum({ ...newForum, program_ids: [value] })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un programa" />
                 </SelectTrigger>

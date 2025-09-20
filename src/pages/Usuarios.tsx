@@ -139,8 +139,8 @@ export default function Usuarios() {
         if (json?.success && json?.data) {
           const arr: User[] = (json.data.users || []).map((u: any) => ({
             id: u.id,
-            name: (u.full_name && String(u.full_name).trim()) ? u.full_name : (u.email ? u.email.split('@')[0] : 'Sin nombre'),
-            full_name: u.full_name || (u.email ? u.email.split('@')[0] : 'Sin nombre'),
+            name: u.full_name || 'Sin nombre',
+            full_name: u.full_name || 'Sin nombre',
             email: u.email || 'Sin email',
             role: (u.role === 'teacher' ? 'formador' : (u.role || 'student')) as 'student' | 'formador' | 'voluntario' | 'admin',
             status: 'active',
@@ -159,9 +159,21 @@ export default function Usuarios() {
         console.warn('list-users fallback:', e);
       }
 
-      // Fallback: RPC existente
-      const { data: usersWithEmails, error: usersError } = await supabase.rpc('get_users_with_emails');
-      if (usersError) throw usersError;
+      // Consulta SOLO a la tabla profiles (sin auth.users por permisos)
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, created_at, updated_at')
+        .order('created_at', { ascending: false });
+
+      if (profilesError) throw profilesError;
+
+      // Usar solo datos de profiles (sin consultar auth.users)
+      const profilesWithAuth = (profilesData || []).map((profile: any) => ({
+        ...profile,
+        email: profile.email || 'Sin email',
+        auth_full_name: profile.full_name || 'Sin nombre',
+        last_sign_in_at: null // No disponible sin auth.users
+      }));
 
       const roleFilter = (u: any) => {
         if (filterRole === 'todos') return true;
@@ -170,21 +182,23 @@ export default function Usuarios() {
       };
       const searchFilter = (u: any) => {
         if (!searchTerm) return true;
-        return (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (u.email || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const searchLower = searchTerm.toLowerCase();
+        return (u.auth_full_name || '').toLowerCase().includes(searchLower) || 
+               (u.email || '').toLowerCase().includes(searchLower);
       };
-      const filtered = (usersWithEmails || []).filter((u: any) => roleFilter(u) && searchFilter(u));
+      const filtered = profilesWithAuth.filter((u: any) => roleFilter(u) && searchFilter(u));
       setTotal(filtered.length);
       const paginated = filtered.slice((page-1)*pageSize, page*pageSize);
       const arr: User[] = paginated.map((u: any) => ({
         id: u.id,
-        name: (u.full_name && String(u.full_name).trim()) ? u.full_name : (u.email ? u.email.split('@')[0] : 'Sin nombre'),
-        full_name: u.full_name || (u.email ? u.email.split('@')[0] : 'Sin nombre'),
+        name: u.auth_full_name || 'Sin nombre',
+        full_name: u.auth_full_name || 'Sin nombre',
         email: u.email || 'Sin email',
         role: (u.role === 'teacher' ? 'formador' : (u.role || 'student')) as 'student' | 'formador' | 'voluntario' | 'admin',
         status: 'active',
         enrolledPrograms: 0,
         joinedAt: u.created_at || new Date().toISOString(),
-        lastSignInAt: null,
+        lastSignInAt: u.last_sign_in_at || null,
       }));
       setUsers(arr);
     } catch (error: any) {
@@ -271,7 +285,7 @@ export default function Usuarios() {
           .insert({
             id: userId,
             full_name: newName,
-            role: newRole
+            role: newRole as 'student' | 'admin' | 'teacher'
           });
 
         if (profileError) throw profileError;
@@ -282,7 +296,7 @@ export default function Usuarios() {
         const programEnrollments = selectedPrograms.map(programId => ({
           user_id: userId,
           program_id: programId,
-          status: 'active'
+          status: 'active' as const
         }));
 
         const { error: programError } = await supabase
@@ -290,6 +304,38 @@ export default function Usuarios() {
           .upsert(programEnrollments, { onConflict: 'user_id,program_id' });
 
         if (programError) throw programError;
+
+        // Inscribir automáticamente en todos los cursos de los programas seleccionados
+        for (const programId of selectedPrograms) {
+          // Obtener todos los cursos del programa
+          const { data: programCourses, error: coursesError } = await supabase
+            .from('program_courses')
+            .select('course_id')
+            .eq('program_id', programId);
+
+          if (coursesError) {
+            console.warn(`Error getting courses for program ${programId}:`, coursesError);
+            continue;
+          }
+
+          if (programCourses && programCourses.length > 0) {
+            // Crear inscripciones en course_enrollments para cada curso del programa
+            const courseEnrollments = programCourses.map(pc => ({
+              user_id: userId,
+              course_id: pc.course_id,
+              status: 'active' as const,
+              progress_percent: 0
+            }));
+
+            const { error: courseEnrollmentError } = await supabase
+              .from('course_enrollments')
+              .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+
+            if (courseEnrollmentError) {
+              console.warn(`Error enrolling in courses for program ${programId}:`, courseEnrollmentError);
+            }
+          }
+        }
       }
 
       // Inscribir en cursos
@@ -297,7 +343,7 @@ export default function Usuarios() {
         const courseEnrollments = selectedCourses.map(courseId => ({
           user_id: userId,
           course_id: courseId,
-          status: 'active'
+          status: 'active' as const
         }));
 
         const { error: courseError } = await supabase
@@ -374,7 +420,7 @@ export default function Usuarios() {
   };
 
   const handleEditUser = (user: User) => {
-    setUserToEdit(user);
+    setUserToEdit(user as any);
     setShowEditProfile(true);
   };
 
@@ -860,12 +906,14 @@ export default function Usuarios() {
       />
 
       {/* Dialog de edición de perfil */}
-      <EditUserProfileDialog
-        user={userToEdit}
-        open={showEditProfile}
-        onOpenChange={setShowEditProfile}
-        onSuccess={handleEditSuccess}
-      />
+      {userToEdit && (
+        <EditUserProfileDialog
+          user={userToEdit}
+          open={showEditProfile}
+          onOpenChange={setShowEditProfile}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </div>
   );
 }

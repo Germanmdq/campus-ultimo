@@ -105,7 +105,6 @@ export default function LessonDetail() {
       if (materialsError) {
         console.error('Error fetching materials:', materialsError);
       } else {
-        console.log('Materials loaded for lesson:', lessonData.title, materialsData);
       }
       
       setMaterials(materialsData || []);

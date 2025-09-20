@@ -49,7 +49,6 @@ export function MultiEnrollUserForm({ open, onOpenChange, onSuccess }: MultiEnro
 
   useEffect(() => {
     if (open) {
-      console.log('Dialog opened, fetching data...');
       fetchPrograms();
       fetchCourses(); 
       fetchUsers();
@@ -66,7 +65,6 @@ export function MultiEnrollUserForm({ open, onOpenChange, onSuccess }: MultiEnro
       .select('id, title')
       .order('title');
     
-    console.log('Programs data:', data, 'Programs error:', error);
     setPrograms(data || []);
   };
 
@@ -76,14 +74,12 @@ export function MultiEnrollUserForm({ open, onOpenChange, onSuccess }: MultiEnro
       .select('id, title, program_id')
       .order('title');
     
-    console.log('Courses data:', data, 'Courses error:', error);
     setCourses(data || []);
   };
 
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase.rpc('get_users_with_emails');
-      console.log('Users data:', data, 'Users error:', error);
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -175,6 +171,52 @@ export function MultiEnrollUserForm({ open, onOpenChange, onSuccess }: MultiEnro
           .upsert(enrollments, { onConflict: 'user_id,program_id' });
 
         if (error) throw error;
+      }
+
+      // Inscribir automáticamente en todos los cursos de los programas seleccionados
+      for (const programId of selectedPrograms) {
+        // Obtener todos los cursos del programa
+        const { data: programCourses, error: coursesError } = await supabase
+          .from('program_courses')
+          .select('course_id')
+          .eq('program_id', programId);
+
+        if (coursesError) {
+          continue;
+        }
+
+        if (programCourses && programCourses.length > 0) {
+          // Crear inscripciones en course_enrollments para cada curso del programa
+          const courseEnrollments = programCourses.map(pc => ({
+            user_id: selectedUser.id,
+            course_id: pc.course_id,
+            status: 'active' as const,
+            progress_percent: 0
+          }));
+
+          const { error: courseEnrollmentError } = await supabase
+            .from('course_enrollments')
+            .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+
+        }
+      }
+
+      // Inscribir en cursos individuales seleccionados
+      if (selectedCourses.length > 0) {
+        const courseEnrollments = selectedCourses.map(courseId => ({
+          user_id: selectedUser.id,
+          course_id: courseId,
+          status: 'active' as const,
+          progress_percent: 0
+        }));
+
+        const { error: courseError } = await supabase
+          .from('course_enrollments')
+          .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+
+        if (courseError) {
+          console.error('Error enrolling in individual courses:', courseError);
+        }
       }
 
       toast({

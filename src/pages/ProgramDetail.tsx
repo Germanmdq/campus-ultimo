@@ -102,10 +102,8 @@ export default function ProgramDetail() {
 
       if (!programCoursesError && programCoursesData && programCoursesData.length > 0) {
         coursesData = programCoursesData.map(pc => pc.courses).filter(Boolean);
-        console.log('Courses loaded via program_courses table:', coursesData.length);
       } else {
         // Method 2: Fallback to direct program_id relationship
-        console.log('Trying direct program_id relationship for program:', programData.id);
         const { data: directCoursesData, error: directCoursesError } = await supabase
           .from('courses')
           .select(`
@@ -124,7 +122,6 @@ export default function ProgramDetail() {
           throw directCoursesError;
         }
         coursesData = directCoursesData || [];
-        console.log('Courses loaded via direct relationship:', coursesData.length);
       }
 
       setCourses(coursesData);

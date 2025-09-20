@@ -54,7 +54,6 @@ export function AvatarUpload({
     setUploading(true);
 
     try {
-      console.log('🚀 Starting avatar upload...');
 
       // 1. Verificar autenticación
       const sessionValid = await checkAndRefreshSession();
@@ -78,7 +77,6 @@ export function AvatarUpload({
         return;
       }
 
-      console.log('✅ User authenticated:', user.id);
 
       // 2. Generar nombre de archivo único
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
@@ -94,7 +92,6 @@ export function AvatarUpload({
         `user-avatar-${Date.now()}.${fileExt}`                // Nombre más simple
       ];
 
-      console.log('📝 Generated filename options:', fileNames);
 
       // 3. Intentar upload con diferentes estrategias
       const uploadResult = await tryMultipleUploadStrategies(file, fileNames);
@@ -103,7 +100,6 @@ export function AvatarUpload({
         throw new Error(uploadResult.error);
       }
 
-      console.log('✅ Upload successful:', uploadResult.publicUrl);
 
       // 4. Actualizar UI
       onChange?.(uploadResult.publicUrl);
@@ -149,7 +145,6 @@ export function AvatarUpload({
   const tryMultipleUploadStrategies = async (file: File, fileNames: string[]) => {
     for (let i = 0; i < fileNames.length; i++) {
       const fileName = fileNames[i];
-      console.log(`📤 Upload attempt ${i + 1}/${fileNames.length}: ${fileName}`);
 
       try {
         // Intentar upload con configuraciones progresivamente más permisivas
@@ -185,7 +180,6 @@ export function AvatarUpload({
               .from('avatars')
               .getPublicUrl(fileName);
 
-            console.log(`✅ Upload successful with config:`, config);
             return {
               success: true,
               publicUrl: urlData.publicUrl,
@@ -221,7 +215,6 @@ export function AvatarUpload({
 
   // 🪣 MANEJAR BUCKET FALTANTE
   const handleMissingBucket = async (file: File) => {
-    console.log('🪣 Bucket not found, showing setup instructions...');
     
     // Mostrar instrucciones específicas para crear el bucket manualmente
     const setupMessage = `
@@ -250,7 +243,6 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
     `;
 
-    console.log(setupMessage);
 
     return {
       success: false,
@@ -299,7 +291,6 @@ ON CONFLICT (id) DO NOTHING;
   const resetFileInput = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
-      console.log('🧹 File input reset');
     }
   };
 

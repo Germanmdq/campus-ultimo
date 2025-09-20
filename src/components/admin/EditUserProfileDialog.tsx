@@ -17,21 +17,22 @@ const formSchema = z.object({
   email: z.string().email({ message: 'Email inválido' }),
 });
 
-interface User {
+interface EditableUser {
   id: string;
   name: string;
+  full_name: string;
   email: string;
   role: 'student' | 'formador' | 'voluntario' | 'admin';
-  status: string;
+  status: 'active' | 'inactive';
   enrolledPrograms: number;
   joinedAt: string;
-  lastSignInAt: string | null;
-  programs: string[];
-  courses: string[];
+  lastSignInAt?: string | null;
+  programs?: string[];
+  courses?: string[];
 }
 
 interface EditUserProfileDialogProps {
-  user: User | null;
+  user: EditableUser | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;

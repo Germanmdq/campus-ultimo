@@ -92,7 +92,6 @@ export function LessonMaterialsDialog({
   };
 
   const handleAddMaterial = async () => {
-    console.log('Trying to add material:', newMaterial);
     
     if (!newMaterial.title.trim()) {
       toast({
@@ -127,12 +126,10 @@ export function LessonMaterialsDialog({
       let url = null;
 
       if (newMaterial.type === 'file' && newMaterial.file) {
-        console.log('Uploading file:', newMaterial.file.name);
         fileUrl = await handleFileUpload(newMaterial.file);
         if (!fileUrl) {
           throw new Error('Error uploading file');
         }
-        console.log('File uploaded successfully:', fileUrl);
       } else {
         url = newMaterial.url.trim();
       }
@@ -146,7 +143,6 @@ export function LessonMaterialsDialog({
         sort_order: materials.length + 1
       };
 
-      console.log('Inserting material data:', insertData);
 
       const { error } = await supabase
         .from('lesson_materials')
@@ -157,7 +153,6 @@ export function LessonMaterialsDialog({
         throw error;
       }
 
-      console.log('Material inserted successfully');
 
       // Update lesson to mark it has materials
       await supabase

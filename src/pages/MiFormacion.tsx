@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { usePrograms } from '@/hooks/usePrograms';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -18,9 +17,9 @@ type CourseCard = {
 };
 
 export default function MiFormacion() {
-  const { programs } = usePrograms();
   const { profile } = useAuth();
   const [myCourses, setMyCourses] = useState<CourseCard[]>([]);
+  const [myPrograms, setMyPrograms] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchMyCourses = async () => {
@@ -29,14 +28,31 @@ export default function MiFormacion() {
         return;
       }
 
-      // Cursos desde programas inscritos
-      const { data: myPrograms } = await supabase
+      // Programas inscritos
+      const { data: enrollmentsData } = await supabase
         .from('enrollments')
-        .select('program_id')
+        .select(`
+          program_id,
+          programs (
+            id,
+            title,
+            summary,
+            slug,
+            poster_2x3_url,
+            wide_11x6_url,
+            published_at
+          )
+        `)
         .eq('user_id', profile.id)
         .eq('status', 'active');
 
-      const programIds = (myPrograms || []).map(p => p.program_id);
+      const enrolledPrograms = (enrollmentsData || [])
+        .map(row => row.programs)
+        .filter(Boolean);
+      
+      setMyPrograms(enrolledPrograms);
+
+      const programIds = (enrollmentsData || []).map(p => p.program_id);
 
       let programCourses: any[] = [];
       if (programIds.length > 0) {
@@ -53,21 +69,38 @@ export default function MiFormacion() {
         .filter(Boolean);
 
       // Cursos individuales inscritos
-      const { data: ce } = await supabase
+      const { data: ce, error: ceError } = await supabase
         .from('course_enrollments')
-        .select('courses (id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at)')
+        .select(`
+          id,
+          user_id,
+          course_id,
+          status,
+          courses (
+            id,
+            title,
+            summary,
+            slug,
+            poster_2x3_url,
+            wide_11x6_url,
+            published_at
+          )
+        `)
         .eq('user_id', profile.id)
         .eq('status', 'active');
+
+      if (ceError) {
+        console.error('Error obteniendo course_enrollments:', ceError);
+      }
 
       const individualCourses = (ce || [])
         .map(row => row.courses)
         .filter(Boolean);
 
-      // Ocultar cursos individuales que ya están incluidos en programas inscritos (bundle)
-      const bundledCourseIds = new Set<string>((coursesFromPrograms || []).map((c: any) => c.id));
-      const filteredIndividuals = (individualCourses || []).filter((c: any) => c && !bundledCourseIds.has(c.id));
-      // Mostrar solo cursos individuales no cubiertos por programas
-      setMyCourses(filteredIndividuals);
+      // Combinar TODOS los cursos: de programas + individuales
+      const allCourses = [...coursesFromPrograms, ...individualCourses];
+
+      setMyCourses(allCourses);
     };
 
     fetchMyCourses();
@@ -82,7 +115,7 @@ export default function MiFormacion() {
 
       {/* Grilla unificada 3 por fila: primero programas, luego cursos */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {programs.map((program) => (
+        {myPrograms.map((program) => (
           <Card key={`program-${program.id}`} className="cursor-pointer hover:elev-3 hover:-translate-y-1 transition-all duration-300 glow-hover">
             <Link to={`/programas/${program.slug}`}>
               <div className="aspect-[2/3] bg-gradient-to-br from-accent/20 to-accent/10 rounded-t-lg flex items-center justify-center">
