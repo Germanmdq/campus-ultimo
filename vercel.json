@@ -1,1 +1,1 @@
-{"buildCommand":"npm run build","installCommand":"npm install","framework":"vite","nodeVersion":"18.x"}
+{"buildCommand":"npm run build","installCommand":"npm install","framework":"vite"}
