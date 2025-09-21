@@ -1,5 +1,8 @@
 {
   "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps",
-  "framework": "vite"
+  "framework": "vite",
+  "functions": {
+    "nodeVersion": "18"
+  }
 }
