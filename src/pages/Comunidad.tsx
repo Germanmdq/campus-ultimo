@@ -187,7 +187,7 @@ export default function Comunidad() {
         });
         return;
       }
-      
+    
     setForums(data || []);
     } catch (error) {
       console.error('Error in fetchForums:', error);
@@ -685,6 +685,13 @@ export default function Comunidad() {
           profiles!forum_post_replies_author_id_fkey (
             full_name,
             role
+          ),
+          forum_reply_files (
+            id,
+            file_url,
+            file_name,
+            file_type,
+            file_size
           )
         `)
         .eq('post_id', postId)
@@ -698,7 +705,8 @@ export default function Comunidad() {
       const processedReplies = validReplies.map((reply: any) => ({
         ...reply,
         author_name: reply.profiles?.full_name || 'Usuario',
-        author_role: reply.profiles?.role || 'student'
+        author_role: reply.profiles?.role || 'student',
+        files: reply.forum_reply_files || []
       }));
 
       setReplies(prev => ({
@@ -754,12 +762,12 @@ export default function Comunidad() {
       if (files.length > 0) {
         const uploadedFiles = await uploadReplyFiles(postId);
         
-        // Guardar archivos en la base de datos
+        // Guardar archivos en la base de datos (tabla de archivos de respuestas)
         if (uploadedFiles.length > 0) {
           const { error: filesError } = await supabase
-            .from('forum_post_files')
+            .from('forum_reply_files')
             .insert(uploadedFiles.map(file => ({
-              post_id: postId,
+              reply_id: replyData.id,
               file_url: file.file_url,
               file_name: file.file_name,
               file_type: file.file_type,
@@ -1328,6 +1336,44 @@ export default function Comunidad() {
                             </span>
                           </div>
                           <p className="text-sm text-foreground">{reply.content}</p>
+                          
+                          {/* Mostrar archivos adjuntos de la respuesta */}
+                          {reply.files && reply.files.length > 0 && (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-muted-foreground">Archivos adjuntos:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {reply.files.map((file: any) => (
+                                  <div key={file.id} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
+                                    {file.file_type.startsWith('image/') ? (
+                                      <img 
+                                        src={file.file_url} 
+                                        alt={file.file_name}
+                                        className="w-8 h-8 object-cover rounded"
+                                      />
+                                    ) : (
+                                      <div className="w-8 h-8 bg-accent rounded flex items-center justify-center">
+                                        📎
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium truncate">{file.file_name}</p>
+                                      <p className="text-muted-foreground">
+                                        {(file.file_size / 1024).toFixed(1)} KB
+                                      </p>
+                                    </div>
+                                    <a 
+                                      href={file.file_url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-blue-500 hover:text-blue-700"
+                                    >
+                                      Ver
+                                    </a>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
