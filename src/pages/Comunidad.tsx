@@ -1337,7 +1337,7 @@ export default function Comunidad() {
                           </div>
                           <p className="text-sm text-foreground">{reply.content}</p>
                           
-                          {/* Mostrar archivos adjuntos de la respuesta */}
+                          {/* Mostrar archivos adjuntos de la respuesta - Vercel deploy fix */}
                           {reply.files && reply.files.length > 0 && (
                             <div className="mt-2 space-y-2">
                               <p className="text-xs text-muted-foreground">Archivos adjuntos:</p>
