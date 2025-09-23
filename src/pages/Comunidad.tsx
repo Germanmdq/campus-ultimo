@@ -87,6 +87,7 @@ export default function Comunidad() {
   const [showReplies, setShowReplies] = useState<{ [postId: string]: boolean }>({});
   const [newReply, setNewReply] = useState<{ [postId: string]: string }>({});
   const [replies, setReplies] = useState<{ [postId: string]: any[] }>({});
+  const [replyFiles, setReplyFiles] = useState<{ [postId: string]: File[] }>({});
 
   const isTeacherOrAdmin = profile?.role === 'teacher' || profile?.role === 'admin';
 
@@ -213,6 +214,14 @@ export default function Comunidad() {
     setSelectedFiles(files);
   };
 
+  // Función para manejar cambios en archivos de respuestas
+  const handleReplyFilesChange = (postId: string, files: File[]) => {
+    setReplyFiles(prev => ({
+      ...prev,
+      [postId]: files
+    }));
+  };
+
   // Función simplificada para subir archivos usando el bucket forum-files
   const uploadFiles = async (postId: string) => {
     if (selectedFiles.length === 0) return [];
@@ -288,6 +297,72 @@ export default function Comunidad() {
       console.error('Error in uploadFiles:', error);
     } finally {
       setUploadingFiles(false);
+    }
+
+    return uploadedFiles;
+  };
+
+  // Función para subir archivos de respuestas
+  const uploadReplyFiles = async (postId: string) => {
+    const files = replyFiles[postId] || [];
+    if (files.length === 0) return [];
+
+    const uploadedFiles = [];
+
+    try {
+      // Verificar que el bucket existe
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      if (bucketsError) {
+        console.warn('No se pudieron listar buckets:', bucketsError);
+      }
+
+      const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
+      if (!forumFilesBucket) {
+        toast({
+          title: "🪣 Bucket no encontrado",
+          description: "El bucket 'forum-files' no existe. Contacta al administrador.",
+          variant: "destructive",
+        });
+        return [];
+      }
+
+      for (const file of files) {
+        try {
+          const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
+          const fileName = `reply-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+          const filePath = `forum-files/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('forum-files')
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: true,
+              contentType: file.type
+            });
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('forum-files')
+            .getPublicUrl(filePath);
+
+          uploadedFiles.push({
+            file_url: publicUrl,
+            file_name: file.name,
+            file_type: file.type,
+            file_size: file.size
+          });
+        } catch (error) {
+          console.error('Error uploading reply file:', error);
+          toast({
+            title: "Error subiendo archivo",
+            description: `No se pudo subir ${file.name}`,
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error in uploadReplyFiles:', error);
     }
 
     return uploadedFiles;
@@ -609,19 +684,51 @@ export default function Comunidad() {
     }
 
     try {
-      const { error } = await supabase
+      // Crear la respuesta
+      const { data: replyData, error: replyError } = await supabase
         .from('forum_post_replies')
         .insert([{
           post_id: postId,
           author_id: user.id,
           content: replyContent
-        }]);
+        }])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (replyError) throw replyError;
+
+      // Subir archivos si hay alguno
+      const files = replyFiles[postId] || [];
+      if (files.length > 0) {
+        const uploadedFiles = await uploadReplyFiles(postId);
+        
+        // Guardar archivos en la base de datos
+        if (uploadedFiles.length > 0) {
+          const { error: filesError } = await supabase
+            .from('forum_post_files')
+            .insert(uploadedFiles.map(file => ({
+              post_id: postId,
+              file_url: file.file_url,
+              file_name: file.file_name,
+              file_type: file.file_type,
+              file_size: file.file_size
+            })));
+
+          if (filesError) {
+            console.error('Error saving reply files:', filesError);
+          }
+        }
+      }
 
       setNewReply(prev => ({
         ...prev,
         [postId]: ''
+      }));
+
+      // Limpiar archivos de la respuesta
+      setReplyFiles(prev => ({
+        ...prev,
+        [postId]: []
       }));
 
       // Actualizar comentarios y conteo de posts
@@ -1190,6 +1297,14 @@ export default function Comunidad() {
                           }))}
                           className="min-h-[60px]"
                         />
+                        
+                        {/* Componente de subida de archivos para respuestas */}
+                        <ForumFileUpload
+                          onFilesChange={(files) => handleReplyFilesChange(post.id, files)}
+                          maxFiles={3}
+                          maxSizePerFile={5}
+                        />
+                        
                         <div className="flex justify-end">
                           <Button
                             size="sm"
