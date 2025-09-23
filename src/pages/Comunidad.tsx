@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import ForumFileUpload from '@/components/ui/forum-file-upload';
 
 interface ForumPost {
   id: string;
@@ -207,91 +208,88 @@ export default function Comunidad() {
     setPrograms(data || []);
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    const validFiles = files.filter(file => {
-      const maxSize = 10 * 1024 * 1024; // 10MB
-      const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/webm', 'application/pdf'];
-      
-      if (file.size > maxSize) {
-        toast({
-          title: "Archivo muy grande",
-          description: `${file.name} es muy grande. Máximo 10MB`,
-          variant: "destructive",
-        });
-        return false;
-      }
-      
-      if (!validTypes.includes(file.type)) {
-        toast({
-          title: "Tipo de archivo no válido",
-          description: `${file.name} no es un tipo de archivo válido`,
-          variant: "destructive",
-        });
-        return false;
-      }
-      
-      return true;
-    });
-    
-    setSelectedFiles(prev => [...prev, ...validFiles]);
+  // Función para manejar cambios en archivos del componente ForumFileUpload
+  const handleFilesChange = (files: File[]) => {
+    setSelectedFiles(files);
   };
 
-  const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
+  // Función simplificada para subir archivos usando el bucket forum-files
   const uploadFiles = async (postId: string) => {
     if (selectedFiles.length === 0) return [];
 
     setUploadingFiles(true);
     const uploadedFiles = [];
 
-    for (const file of selectedFiles) {
-      try {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `forum-files/${fileName}`;
+    try {
+      // Verificar que el bucket existe
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      if (bucketsError) {
+        console.warn('No se pudieron listar buckets:', bucketsError);
+      }
 
-        const { error: uploadError } = await supabase.storage
-          .from('forum-files')
-          .upload(filePath, file);
+      const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
+      if (!forumFilesBucket) {
+        toast({
+          title: "🪣 Bucket no encontrado",
+          description: "El bucket 'forum-files' no existe. Contacta al administrador.",
+          variant: "destructive",
+        });
+        return [];
+      }
 
-        if (uploadError) throw uploadError;
+      for (const file of selectedFiles) {
+        try {
+          const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
+          const fileName = `forum-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+          const filePath = `forum-files/${fileName}`;
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('forum-files')
-          .getPublicUrl(filePath);
+          const { error: uploadError } = await supabase.storage
+            .from('forum-files')
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: true,
+              contentType: file.type
+            });
 
-        const { error: dbError } = await supabase
-          .from('forum_post_files')
-          .insert([{
-            post_id: postId,
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('forum-files')
+            .getPublicUrl(filePath);
+
+          const { error: dbError } = await supabase
+            .from('forum_post_files')
+            .insert([{
+              post_id: postId,
+              file_url: publicUrl,
+              file_name: file.name,
+              file_type: file.type,
+              file_size: file.size
+            }]);
+
+          if (dbError) throw dbError;
+
+          uploadedFiles.push({
             file_url: publicUrl,
             file_name: file.name,
             file_type: file.type,
             file_size: file.size
-          }]);
-
-        if (dbError) throw dbError;
-
-        uploadedFiles.push({
-          file_url: publicUrl,
-          file_name: file.name,
-          file_type: file.type,
-          file_size: file.size
-        });
-      } catch (error) {
-        console.error('Error uploading file:', error);
-        toast({
-          title: "Error subiendo archivo",
-          description: `No se pudo subir ${file.name}`,
-          variant: "destructive",
-        });
+          });
+        } catch (error) {
+          console.error('Error uploading file:', error);
+          toast({
+            title: "Error subiendo archivo",
+            description: `No se pudo subir ${file.name}`,
+            variant: "destructive",
+          });
+        }
       }
+    } catch (error) {
+      console.error('Error in uploadFiles:', error);
+    } finally {
+      setUploadingFiles(false);
     }
 
-    setUploadingFiles(false);
     return uploadedFiles;
   };
 
@@ -841,44 +839,11 @@ export default function Comunidad() {
                 </div>
 
                 <div>
-                  <Label htmlFor="files">Archivos (opcional)</Label>
-                  <div className="space-y-2">
-                    <Input
-                      id="files"
-                      type="file"
-                      multiple
-                      accept="image/*,video/*,.pdf"
-                      onChange={handleFileSelect}
-                      className="cursor-pointer"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Puedes subir imágenes, videos o PDFs. Máximo 10MB por archivo.
-                    </p>
-                    
-                    {selectedFiles.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Archivos seleccionados:</p>
-                        {selectedFiles.map((file, index) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">{file.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                              </span>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => removeFile(index)}
-                              className="h-6 w-6 p-0"
-                            >
-                              ×
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <ForumFileUpload
+                    onFilesChange={handleFilesChange}
+                    maxFiles={5}
+                    maxSizePerFile={10}
+                  />
                 </div>
 
                 <div className="flex gap-2">
