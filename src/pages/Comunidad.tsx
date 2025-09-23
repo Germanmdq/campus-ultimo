@@ -58,6 +58,7 @@ interface Program {
 }
 
 export default function Comunidad() {
+  // Vercel deploy test - reply files display fix
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [posts, setPosts] = useState<ForumPost[]>([]);
