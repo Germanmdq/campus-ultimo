@@ -191,12 +191,38 @@ const ForumFileUpload: React.FC<ForumFileUploadProps> = ({
 
       const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
       if (!forumFilesBucket) {
-        toast({
-          title: "🪣 Bucket no encontrado",
-          description: "El bucket 'forum-files' no existe. Contacta al administrador.",
-          variant: "destructive"
+        console.log('🪣 Bucket forum-files no existe, intentando crear...');
+        
+        // Intentar crear el bucket
+        const { error: createError } = await supabase.storage.createBucket('forum-files', {
+          public: true,
+          fileSizeLimit: 10485760, // 10MB
+          allowedMimeTypes: [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp',
+            'application/pdf', 'text/plain', 'text/csv',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'video/mp4', 'video/avi', 'video/quicktime',
+            'audio/mpeg', 'audio/wav', 'audio/ogg'
+          ]
         });
-        return;
+
+        if (createError) {
+          console.error('Error creando bucket:', createError);
+          toast({
+            title: "🪣 Error creando bucket",
+            description: "No se pudo crear el bucket 'forum-files'. Contacta al administrador.",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        console.log('✅ Bucket forum-files creado exitosamente');
+        toast({
+          title: "✅ Bucket creado",
+          description: "El bucket 'forum-files' fue creado automáticamente",
+        });
       }
 
       // Subir archivos uno por uno

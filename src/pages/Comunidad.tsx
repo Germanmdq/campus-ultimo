@@ -168,16 +168,16 @@ export default function Comunidad() {
   const fetchForums = async () => {
     try {
       const { data, error } = await supabase
-        .from('forums')
-        .select(`
-          id,
-          name,
-          description,
-          program_id,
-          programs (title)
-        `)
-        .order('name');
-      
+      .from('forums')
+      .select(`
+        id,
+        name,
+        description,
+        program_id,
+        programs (title)
+      `)
+      .order('name');
+    
       if (error) {
         console.error('Error fetching forums:', error);
         toast({
@@ -188,7 +188,7 @@ export default function Comunidad() {
         return;
       }
       
-      setForums(data || []);
+    setForums(data || []);
     } catch (error) {
       console.error('Error in fetchForums:', error);
       toast({
@@ -238,12 +238,38 @@ export default function Comunidad() {
 
       const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
       if (!forumFilesBucket) {
-        toast({
-          title: "🪣 Bucket no encontrado",
-          description: "El bucket 'forum-files' no existe. Contacta al administrador.",
-          variant: "destructive",
+        console.log('🪣 Bucket forum-files no existe, intentando crear...');
+        
+        // Intentar crear el bucket
+        const { error: createError } = await supabase.storage.createBucket('forum-files', {
+          public: true,
+          fileSizeLimit: 10485760, // 10MB
+          allowedMimeTypes: [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp',
+            'application/pdf', 'text/plain', 'text/csv',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'video/mp4', 'video/avi', 'video/quicktime',
+            'audio/mpeg', 'audio/wav', 'audio/ogg'
+          ]
         });
-        return [];
+
+        if (createError) {
+          console.error('Error creando bucket:', createError);
+          toast({
+            title: "🪣 Error creando bucket",
+            description: "No se pudo crear el bucket 'forum-files'. Contacta al administrador.",
+            variant: "destructive",
+          });
+          return [];
+        }
+
+        console.log('✅ Bucket forum-files creado exitosamente');
+        toast({
+          title: "✅ Bucket creado",
+          description: "El bucket 'forum-files' fue creado automáticamente",
+        });
       }
 
       for (const file of selectedFiles) {
@@ -318,12 +344,38 @@ export default function Comunidad() {
 
       const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
       if (!forumFilesBucket) {
-        toast({
-          title: "🪣 Bucket no encontrado",
-          description: "El bucket 'forum-files' no existe. Contacta al administrador.",
-          variant: "destructive",
+        console.log('🪣 Bucket forum-files no existe, intentando crear...');
+        
+        // Intentar crear el bucket
+        const { error: createError } = await supabase.storage.createBucket('forum-files', {
+          public: true,
+          fileSizeLimit: 10485760, // 10MB
+          allowedMimeTypes: [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp',
+            'application/pdf', 'text/plain', 'text/csv',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'video/mp4', 'video/avi', 'video/quicktime',
+            'audio/mpeg', 'audio/wav', 'audio/ogg'
+          ]
         });
-        return [];
+
+        if (createError) {
+          console.error('Error creando bucket:', createError);
+          toast({
+            title: "🪣 Error creando bucket",
+            description: "No se pudo crear el bucket 'forum-files'. Contacta al administrador.",
+            variant: "destructive",
+          });
+          return [];
+        }
+
+        console.log('✅ Bucket forum-files creado exitosamente');
+        toast({
+          title: "✅ Bucket creado",
+          description: "El bucket 'forum-files' fue creado automáticamente",
+        });
       }
 
       for (const file of files) {
@@ -450,8 +502,8 @@ export default function Comunidad() {
     try {
       // Crear un foro por cada programa seleccionado
       const forumsToCreate = newForum.program_ids.map(program_id => ({
-        name: newForum.name.trim(),
-        description: newForum.description.trim() || null,
+          name: newForum.name.trim(),
+          description: newForum.description.trim() || null,
         program_id: program_id
       }));
 
@@ -841,7 +893,7 @@ export default function Comunidad() {
                 <div>
                   <Label>Programas</Label>
                   <div className="space-y-2 mt-2">
-                    {programs.map(program => (
+                      {programs.map(program => (
                       <div key={program.id} className="flex items-center space-x-2">
                         <Checkbox
                           id={`create-program-${program.id}`}
@@ -864,7 +916,7 @@ export default function Comunidad() {
                           {program.title}
                         </Label>
                       </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
 
@@ -1012,9 +1064,9 @@ export default function Comunidad() {
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-semibold text-foreground">{forum.name}</h4>
                         <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">
+                        <Badge variant="secondary" className="text-xs">
                             {totalPosts} {totalPosts === 1 ? 'post' : 'posts'}
-                          </Badge>
+                        </Badge>
                           {isTeacherOrAdmin && (
                             <div className="flex gap-1">
                               <Button
