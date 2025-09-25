@@ -1,0 +1,20 @@
+name: GHL Weekly Sync
+
+on:
+  schedule:
+    # Ejecutar todos los lunes a las 10:00 UTC (07:00 ART)
+    - cron: '0 10 * * 1'
+  workflow_dispatch: # Permitir ejecución manual
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Call GHL Weekly Sync Function
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            https://epqalebkqmkddlfomnyf.supabase.co/functions/v1/-ghl-weekly-sync
