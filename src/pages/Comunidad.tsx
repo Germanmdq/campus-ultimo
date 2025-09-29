@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import ForumFileUpload from '@/components/ui/forum-file-upload';
-import { uploadFiles as uploadReplyFiles } from '@/components/ui/forum-file-upload';
+import { uploadFiles as uploadReplyFilesFromComponent } from '@/components/ui/forum-file-upload';
 import { uploadNestedFiles } from '@/components/ui/forum-nested-file-upload';
 
 interface ForumPost {
@@ -101,7 +101,7 @@ export default function Comunidad() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [replyFiles, setReplyFiles] = useState<{ [postId: string]: File[] }>({});
 
-  const isTeacherOrAdmin = profile?.role === 'teacher' || profile?.role === 'admin';
+  const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
 
   // Componente mejorado para renderizar archivos adjuntos
   const EnhancedFileAttachment = ({ file, onImageClick }: { file: any; onImageClick?: (url: string) => void }) => {
@@ -301,10 +301,10 @@ export default function Comunidad() {
         .eq('id', user.id)
         .single();
 
-      const userRole = profile?.role;
+      const userRole = profile?.role as string;
 
       // Si es admin, formador o voluntario, mostrar TODOS los foros
-      if (userRole === 'admin' || userRole === 'teacher' || userRole === 'voluntario') {
+      if (userRole === 'admin' || userRole === 'formador' || userRole === 'voluntario') {
         
         const { data, error } = await supabase
       .from('forums')
@@ -854,7 +854,7 @@ export default function Comunidad() {
       console.log('🔍 fetchReplies - replyIds:', replyIds);
       
       const { data: filesData, error: filesError } = await supabase
-        .from('forum_reply_files')
+        .from('forum_reply_files' as any)
         .select('*')
         .in('reply_id', replyIds);
 
@@ -867,7 +867,7 @@ export default function Comunidad() {
 
       // Combinar respuestas con sus archivos
       const processedReplies = validReplies.map((reply: any) => {
-        const replyFiles = filesData?.filter(f => f.reply_id === reply.id) || [];
+        const replyFiles = filesData?.filter((f: any) => f.reply_id === reply.id) || [];
         
         return {
           id: reply.id,
@@ -875,7 +875,7 @@ export default function Comunidad() {
         author_name: reply.profiles?.full_name || 'Usuario',
         author_role: reply.profiles?.role || 'student',
           created_at: reply.created_at,
-          files: replyFiles.map(f => ({
+          files: replyFiles.map((f: any) => ({
             id: f.id,
             file_url: f.file_url,
             file_name: f.file_name,
@@ -905,7 +905,7 @@ export default function Comunidad() {
   const debugReplyFiles = async (replyId: string) => {
     try {
       const { data, error } = await supabase
-        .from('forum_reply_files')
+        .from('forum_reply_files' as any)
         .select('*')
         .eq('reply_id', replyId);
         
@@ -979,7 +979,7 @@ export default function Comunidad() {
           
           // ✅ LLAMADA CORRECTA - pasar parámetros separados, no como objeto
           console.log('🚀 Llamando uploadFiles con archivos:', filesArray.length, 'replyId:', replyData.id);
-          const uploadedFiles = await uploadReplyFiles(filesArray, replyData.id);
+          const uploadedFiles = await uploadReplyFilesFromComponent(filesArray, replyData.id);
           console.log('✅ Archivos subidos exitosamente:', uploadedFiles);
           
           // 🔍 DEBUG: Verificar que los archivos se guardaron en DB
@@ -1063,7 +1063,7 @@ export default function Comunidad() {
 
       // Crear la respuesta anidada
       const { data: replyData, error: replyError } = await supabase
-        .from('forum_nested_replies')
+        .from('forum_nested_replies' as any)
         .insert({
           parent_reply_id: parentReplyId,
           content: content.trim(),
@@ -1073,6 +1073,9 @@ export default function Comunidad() {
         .single();
 
       if (replyError) throw replyError;
+
+      // Verificar que replyData no sea un error
+      if (!replyData) throw new Error('No se pudo crear la respuesta anidada');
 
       // Subir archivos si existen
       let uploadedFiles: any[] = [];
@@ -1086,8 +1089,8 @@ export default function Comunidad() {
         content: replyData.content,
         created_at: replyData.created_at,
         author_id: replyData.author_id,
-        author_name: user.full_name || 'Usuario',
-        author_role: user.role || 'student',
+        author_name: (user as any).full_name || 'Usuario',
+        author_role: (user as any).role || 'student',
         files: uploadedFiles
       };
 
@@ -1128,7 +1131,7 @@ export default function Comunidad() {
   const fetchNestedReplies = async (parentReplyId: string) => {
     try {
       const { data, error } = await supabase
-        .from('forum_nested_replies')
+        .from('forum_nested_replies' as any)
         .select(`
           id,
           content,
@@ -1358,7 +1361,7 @@ export default function Comunidad() {
             <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
               <div className="flex items-start gap-2">
                 <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium flex-shrink-0">
-                  {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
+                  {(user as any)?.full_name?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
                 
                 <div className="flex-1 space-y-2">
