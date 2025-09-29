@@ -1077,18 +1077,21 @@ export default function Comunidad() {
       // Verificar que replyData no sea un error
       if (!replyData) throw new Error('No se pudo crear la respuesta anidada');
 
+      // Declarar replyData como any para evitar errores de tipos
+      const reply = replyData as any;
+
       // Subir archivos si existen
       let uploadedFiles: any[] = [];
       if (files && files.length > 0) {
-        uploadedFiles = await uploadNestedFiles(files, replyData.id);
+        uploadedFiles = await uploadNestedFiles(files, reply.id);
       }
 
       // Actualizar estado local
       const newNestedReply = {
-        id: replyData.id,
-        content: replyData.content,
-        created_at: replyData.created_at,
-        author_id: replyData.author_id,
+        id: reply.id,
+        content: reply.content,
+        created_at: reply.created_at,
+        author_id: reply.author_id,
         author_name: (user as any).full_name || 'Usuario',
         author_role: (user as any).role || 'student',
         files: uploadedFiles
