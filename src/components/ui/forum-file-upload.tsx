@@ -104,8 +104,11 @@ const ForumFileUpload: React.FC<ForumFileUploadProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('📁 === INICIO handleFileSelect ===');
     const selectedFiles = Array.from(event.target.files || []);
+    console.log('📁 Archivos seleccionados:', selectedFiles.length);
+    console.log('📁 Nombres de archivos:', selectedFiles.map(f => f.name));
     
     if (selectedFiles.length === 0) return;
 
@@ -161,155 +164,11 @@ const ForumFileUpload: React.FC<ForumFileUploadProps> = ({
     onFilesChange(updatedFiles.map(f => f.file));
   };
 
-  const uploadFiles = async () => {
-    if (files.length === 0) return;
-
-    setUploading(true);
-
-    try {
-      // Verificar autenticación
-      const sessionValid = await checkAndRefreshSession();
-      if (!sessionValid) {
-        toast({
-          title: "🔐 Error de autenticación",
-          description: "Tu sesión ha expirado. Por favor, inicia sesión nuevamente.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error("No se pudo verificar la autenticación");
-      }
-
-      // Verificar que el bucket existe
-      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-      if (bucketsError) {
-        console.warn('No se pudieron listar buckets:', bucketsError);
-      }
-
-      const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
-      if (!forumFilesBucket) {
-        console.log('🪣 Bucket forum-files no existe, intentando crear...');
-        
-        // Intentar crear el bucket
-        const { error: createError } = await supabase.storage.createBucket('forum-files', {
-          public: true,
-          fileSizeLimit: 10485760, // 10MB
-          allowedMimeTypes: [
-            'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp',
-            'application/pdf', 'text/plain', 'text/csv',
-            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'video/mp4', 'video/avi', 'video/quicktime',
-            'audio/mpeg', 'audio/wav', 'audio/ogg'
-          ]
-        });
-
-        if (createError) {
-          console.error('Error creando bucket:', createError);
-          toast({
-            title: "🪣 Error creando bucket",
-            description: "No se pudo crear el bucket 'forum-files'. Contacta al administrador.",
-            variant: "destructive"
-          });
-          return;
-        }
-
-        console.log('✅ Bucket forum-files creado exitosamente');
-        toast({
-          title: "✅ Bucket creado",
-          description: "El bucket 'forum-files' fue creado automáticamente",
-        });
-      }
-
-      // Subir archivos uno por uno
-      for (let i = 0; i < files.length; i++) {
-        const fileData = files[i];
-        if (fileData.uploaded) continue;
-
-        // Marcar como subiendo
-        setFiles(prev => prev.map((f, idx) => 
-          idx === i ? { ...f, uploading: true, error: undefined } : f
-        ));
-
-        try {
-          const fileExt = fileData.file.name.split('.').pop()?.toLowerCase() || 'bin';
-          const fileName = `forum-${user.id}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-          const filePath = `forum-files/${fileName}`;
-
-          // Subir archivo
-          const { error: uploadError } = await supabase.storage
-            .from('forum-files')
-            .upload(filePath, fileData.file, {
-              cacheControl: '3600',
-              upsert: true,
-              contentType: fileData.file.type
-            });
-
-          if (uploadError) {
-            throw uploadError;
-          }
-
-          // Obtener URL pública
-          const { data: { publicUrl } } = supabase.storage
-            .from('forum-files')
-            .getPublicUrl(filePath);
-
-          // Marcar como subido exitosamente
-          setFiles(prev => prev.map((f, idx) => 
-            idx === i ? { 
-              ...f, 
-              uploading: false, 
-              uploaded: true, 
-              publicUrl 
-            } : f
-          ));
-
-        } catch (error: any) {
-          console.error(`Error subiendo archivo ${fileData.file.name}:`, error);
-          
-          // Marcar como error
-          setFiles(prev => prev.map((f, idx) => 
-            idx === i ? { 
-              ...f, 
-              uploading: false, 
-              uploaded: false, 
-              error: error.message || 'Error desconocido'
-            } : f
-          ));
-        }
-      }
-
-      // Verificar si todos se subieron correctamente
-      const uploadedCount = files.filter(f => f.uploaded).length;
-      const errorCount = files.filter(f => f.error).length;
-
-      if (uploadedCount === files.length) {
-        toast({
-          title: "✅ Archivos subidos",
-          description: `Se subieron ${uploadedCount} archivos correctamente`,
-        });
-      } else if (errorCount > 0) {
-        toast({
-          title: "⚠️ Subida parcial",
-          description: `${uploadedCount} archivos subidos, ${errorCount} con errores`,
-          variant: "destructive"
-        });
-      }
-
-    } catch (error: any) {
-      console.error('Error en uploadFiles:', error);
-      toast({
-        title: "❌ Error subiendo archivos",
-        description: error.message || "Error desconocido",
-        variant: "destructive"
-      });
-    } finally {
-      setUploading(false);
-    }
+  // Función eliminada - no hacer pre-upload aquí
+  const uploadFiles = async (replyId?: string) => {
+    // Esta función está deshabilitada - no hacer pre-upload
+    console.log('⚠️ uploadFiles deshabilitada - no hacer pre-upload aquí');
+    return;
   };
 
   return (
@@ -338,7 +197,7 @@ const ForumFileUpload: React.FC<ForumFileUploadProps> = ({
             <h4 className="text-sm font-medium">Archivos seleccionados ({files.length}/{maxFiles})</h4>
             {files.some(f => !f.uploaded && !f.uploading) && (
               <Button 
-                onClick={uploadFiles} 
+                onClick={() => uploadFiles()} 
                 disabled={uploading}
                 size="sm"
               >
@@ -424,6 +283,194 @@ const ForumFileUpload: React.FC<ForumFileUploadProps> = ({
       )}
     </div>
   );
+};
+
+// Función separada para uso externo - VERSIÓN MEJORADA CON DEBUG
+export const uploadFiles = async (files: File[], replyId: string) => {
+  console.log('🔥 NUEVA uploadFiles - INICIO');
+  console.log('🔥 Files recibidos:', files.length);
+  console.log('🔥 ReplyId recibido:', replyId);
+  
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    console.error('❌ No hay archivos válidos');
+    return [];
+  }
+  
+  if (!replyId) {
+    console.error('❌ No hay replyId válido');
+    return [];
+  }
+  
+  const results = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    console.log(`🔥 Procesando archivo ${i + 1}/${files.length}: ${file.name}`);
+    
+    try {
+      // 1. Subir archivo a Supabase Storage
+      const fileName = `replies/${replyId}/${Date.now()}-${file.name}`;
+      console.log('🔥 Subiendo como:', fileName);
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('forum-files')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.error('❌ Error subiendo archivo:', uploadError);
+        continue;
+      }
+      
+      console.log('✅ Subido a storage:', uploadData);
+
+      // 2. Obtener URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('forum-files')
+        .getPublicUrl(fileName);
+      
+      console.log('🔥 URL pública:', publicUrl);
+
+      // 3. CRÍTICO: Guardar en la tabla forum_reply_files
+      console.log('🔥 Guardando en BD con datos:', {
+        reply_id: replyId,
+        file_url: publicUrl,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size
+      });
+
+      const { data: dbData, error: dbError } = await supabase
+        .from('forum_reply_files')
+        .insert({
+          reply_id: replyId,
+          file_url: publicUrl,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('❌ Error guardando en DB:', dbError);
+        console.error('❌ Detalles del error:', {
+          message: dbError.message,
+          details: dbError.details,
+          hint: dbError.hint,
+          code: dbError.code
+        });
+        
+        // Eliminar archivo del storage si falla el guardado en DB
+        await supabase.storage.from('forum-files').remove([fileName]);
+        continue;
+      }
+
+      console.log('✅ Guardado en BD:', dbData);
+
+      results.push({
+        id: dbData.id,
+        file_url: publicUrl,
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size
+      });
+
+      console.log('✅ Archivo completado:', file.name);
+
+    } catch (error) {
+      console.error('❌ Error procesando archivo:', error);
+    }
+  }
+
+  console.log('🔥 RESULTADO FINAL - Archivos procesados:', results.length);
+  return results;
+};
+
+export const uploadFilesToSupabase = async (files: File[], replyId: string) => {
+  console.log('🔥🔥🔥 uploadFilesToSupabase - INICIO 🔥🔥🔥');
+  console.log('🔥 Files recibidos:', files);
+  console.log('🔥 ReplyId recibido:', replyId);
+  
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    console.error('❌ No hay archivos válidos');
+    return [];
+  }
+  
+  if (!replyId) {
+    console.error('❌ No hay replyId');
+    return [];
+  }
+
+  const results = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    console.log(`🔥 Procesando archivo ${i + 1}/${files.length}: ${file.name}`);
+    
+    try {
+      // 1. Subir a Storage
+      const fileName = `replies/${replyId}/${Date.now()}-${file.name}`;
+      console.log('🔥 Subiendo como:', fileName);
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('forum-files')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.error('❌ Error subiendo:', uploadError);
+        continue;
+      }
+      
+      console.log('✅ Subido a storage:', uploadData);
+
+      // 2. Obtener URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('forum-files')
+        .getPublicUrl(fileName);
+      
+      console.log('🔥 URL pública:', publicUrl);
+
+      // 3. Guardar en base de datos
+      console.log('🔥 Guardando en BD...');
+      const { data: dbData, error: dbError } = await supabase
+        .from('forum_reply_files')
+        .insert({
+          reply_id: replyId,
+          file_url: publicUrl,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('❌ Error en BD:', dbError);
+        // Limpiar archivo si falla BD
+        await supabase.storage.from('forum-files').remove([fileName]);
+        continue;
+      }
+
+      console.log('✅ Guardado en BD:', dbData);
+
+      const result = {
+        id: dbData.id,
+        name: file.name,
+        url: publicUrl,
+        type: file.type,
+        size: file.size
+      };
+
+      results.push(result);
+      console.log('🔥 Archivo completado:', result);
+
+    } catch (error) {
+      console.error('❌ Error procesando archivo:', file.name, error);
+    }
+  }
+
+  console.log('🔥🔥🔥 RESULTADO FINAL:', results);
+  return results;
 };
 
 export default ForumFileUpload;
