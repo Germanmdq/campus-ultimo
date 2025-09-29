@@ -51,7 +51,7 @@ BEGIN
     SELECT 
         u.email::TEXT,
         p.full_name,
-        p.role
+        p.role::TEXT
     FROM auth.users u
     JOIN profiles p ON u.id = p.id
     WHERE p.role = 'admin';
