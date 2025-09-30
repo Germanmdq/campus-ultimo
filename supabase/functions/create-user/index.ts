@@ -64,7 +64,8 @@ Deno.serve(async (req) => {
       user_metadata: {
         full_name,
         role
-      }
+      },
+      email_redirect_to: 'https://campus.espaciodegeometriasagrada.com/' // ✅ Dominio correcto
     }
 
     // Agregar password solo si se proporciona

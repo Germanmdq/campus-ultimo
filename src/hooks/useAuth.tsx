@@ -158,7 +158,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string): Promise<{ error?: string }> => {
     try {
-      const redirectUrl = `${window.location.origin}/`;
+      // Usar el dominio de producción en lugar de localhost
+      const redirectUrl = 'https://campus.espaciodegeometriasagrada.com/';
       
       const { error } = await supabase.auth.signUp({
         email,
