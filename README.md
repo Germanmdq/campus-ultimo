@@ -75,3 +75,4 @@ La UI es responsive (sidebar como drawer en móvil). Probar en la red local con 
 ### Licencia
 Proyecto privado del Espacio de Geometría Sagrada.
 # Trigger deploy
+# Fix Vercel deploy - remove Funnel.app snippets
