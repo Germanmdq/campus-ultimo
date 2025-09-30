@@ -284,10 +284,23 @@ export default function Usuarios() {
           }
         });
 
-        if (error) throw error;
-        if (data.error) throw new Error(data.error);
+        if (error) {
+          console.error('Error en Edge Function:', error);
+          throw new Error(error.message || 'Error llamando a la función de creación de usuario');
+        }
+        
+        if (data?.error) {
+          console.error('Error en respuesta:', data.error);
+          throw new Error(data.error);
+        }
+
+        if (!data?.user?.id) {
+          console.error('Datos de usuario no válidos:', data);
+          throw new Error('No se pudo obtener el ID del usuario creado');
+        }
 
         userId = data.user.id;
+        console.log('Usuario creado exitosamente:', userId);
       }
 
       // Inscribir en programas

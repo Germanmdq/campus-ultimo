@@ -81,6 +81,13 @@ Deno.serve(async (req) => {
       throw userCreationError
     }
 
+    // ✅ Verificar que userData y userData.user existan
+    if (!userData || !userData.user) {
+      throw new Error('No se pudo crear el usuario - datos de usuario no válidos')
+    }
+
+    console.log('Usuario creado:', userData.user.id, userData.user.email)
+
     // Crear perfil
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
@@ -91,10 +98,13 @@ Deno.serve(async (req) => {
       })
 
     if (profileError) {
+      console.error('Error creando perfil:', profileError)
       // Si falla la creación del perfil, eliminar el usuario
       await supabaseAdmin.auth.admin.deleteUser(userData.user.id)
       throw profileError
     }
+
+    console.log('Perfil creado exitosamente')
 
     return new Response(
       JSON.stringify({ 
