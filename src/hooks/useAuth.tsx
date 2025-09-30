@@ -48,8 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    let subscription: any = null
 
-    const getInitialSession = async () => {
+    const initializeAuth = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
         
@@ -72,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false)
         }
       } catch (error) {
-        console.error('Error en getInitialSession:', error)
+        console.error('Error en initializeAuth:', error)
         if (mounted) {
           setUser(null)
           setSession(null)
@@ -82,32 +83,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    getInitialSession()
+    // Solo ejecutar una vez
+    initializeAuth()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    // Configurar listener de cambios de auth
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return
+        
         console.log('Auth event:', event, session ? 'with session' : 'no session')
         
-        if (mounted) {
-          setSession(session)
-          setUser(session?.user ?? null)
-          
-          // Obtener perfil si hay usuario
-          if (session?.user) {
-            const profileData = await fetchProfile(session.user.id)
-            setProfile(profileData)
-          } else {
-            setProfile(null)
-          }
-          
-          setLoading(false)
+        setSession(session)
+        setUser(session?.user ?? null)
+        
+        // Obtener perfil si hay usuario
+        if (session?.user) {
+          const profileData = await fetchProfile(session.user.id)
+          setProfile(profileData)
+        } else {
+          setProfile(null)
         }
+        
+        setLoading(false)
       }
     )
 
+    subscription = authSubscription
+
     return () => {
       mounted = false
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [])
 
