@@ -107,6 +107,13 @@ export default function Usuarios() {
     }
   }, [isTeacherOrAdmin, filterRole, debouncedSearchTerm, page, sortBy, sortDir]);
 
+  // Reset page when search term changes
+  useEffect(() => {
+    if (debouncedSearchTerm !== '') {
+      setPage(1);
+    }
+  }, [debouncedSearchTerm]);
+
   const fetchProgramsAndCourses = async () => {
     try {
       const [programsRes, coursesRes] = await Promise.all([
@@ -188,12 +195,16 @@ export default function Usuarios() {
         return mapped === filterRole;
       };
       const searchFilter = (u: any) => {
-        if (!searchTerm) return true;
-        const searchLower = searchTerm.toLowerCase();
-        return (u.auth_full_name || '').toLowerCase().includes(searchLower) || 
-               (u.email || '').toLowerCase().includes(searchLower);
+        if (!debouncedSearchTerm) return true;
+        const searchLower = debouncedSearchTerm.toLowerCase();
+        const nameMatch = (u.auth_full_name || '').toLowerCase().includes(searchLower);
+        const emailMatch = (u.email || '').toLowerCase().includes(searchLower);
+        return nameMatch || emailMatch;
       };
+      
+      console.log('Buscando usuarios con término:', debouncedSearchTerm);
       const filtered = profilesWithAuth.filter((u: any) => roleFilter(u) && searchFilter(u));
+      console.log('Usuarios filtrados:', filtered.length, 'de', profilesWithAuth.length);
       setTotal(filtered.length);
       const paginated = filtered.slice((page-1)*pageSize, page*pageSize);
       const arr: User[] = paginated.map((u: any) => ({
