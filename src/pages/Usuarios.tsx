@@ -267,28 +267,27 @@ export default function Usuarios() {
 
       // Crear nuevo usuario si es necesario
       if (createNewUser) {
-        const { data: userData, error: userError } = await supabase.auth.admin.createUser({
-          email: newEmail,
-          password: newPassword || undefined,
-          user_metadata: {
+        // Obtener token de sesión actual
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          throw new Error('No hay sesión activa');
+        }
+
+        // Llamar a la Edge Function
+        const { data, error } = await supabase.functions.invoke('create-user', {
+          body: {
+            email: newEmail,
             full_name: newName,
+            password: newPassword || undefined,
             role: newRole
           }
         });
 
-        if (userError) throw userError;
-        userId = userData.user.id;
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
 
-        // Crear perfil
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: userId,
-            full_name: newName,
-            role: newRole as 'student' | 'admin' | 'teacher'
-          });
-
-        if (profileError) throw profileError;
+        userId = data.user.id;
       }
 
       // Inscribir en programas
