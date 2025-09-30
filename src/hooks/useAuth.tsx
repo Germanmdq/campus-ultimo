@@ -50,17 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
     let subscription: any = null
 
-    const initializeAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (mounted) {
-          if (error) {
-            console.error('Error obteniendo sesión:', error)
-            setUser(null)
-            setSession(null)
-            setProfile(null)
-          } else {
+  const initializeAuth = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (mounted) {
+        if (error) {
+          console.error('Error obteniendo sesión:', error)
+          // Limpiar localStorage si hay error de autenticación
+          if (error.message?.includes('400') || error.status === 400) {
+            console.log('Limpiando localStorage debido a error 400')
+            localStorage.removeItem('supabase.auth.token')
+            localStorage.clear()
+          }
+          setUser(null)
+          setSession(null)
+          setProfile(null)
+        } else {
             setSession(session)
             setUser(session?.user ?? null)
             

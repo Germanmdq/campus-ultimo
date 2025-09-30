@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { PlayCircle, Plus, FileText, CheckCircle, Clock, Loader2, BookOpen } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { CreateLessonForm } from '@/components/admin/CreateLessonForm';
 import { EditLessonForm } from '@/components/admin/EditLessonForm';
@@ -34,6 +35,7 @@ interface GroupedLesson {
 export default function Lecciones() {
   const { profile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [lessons, setLessons] = useState<GroupedLesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingApprovals, setPendingApprovals] = useState(0);
@@ -126,10 +128,8 @@ export default function Lecciones() {
   };
 
   const handleViewLesson = (slug: string, title: string) => {
-    toast({
-      title: `Abriendo lección: ${title}`,
-      description: "El reproductor de video se abrirá próximamente",
-    });
+    // Navegar a la página de detalle de la lección
+    navigate(`/leccion/${slug}/detalle`);
   };
 
   // Eliminado: botón para abrir popup de creación (formulario irá inline)
