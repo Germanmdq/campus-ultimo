@@ -32,6 +32,13 @@ interface User {
   courses?: string[];
 }
 
+interface DeleteUserResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  email?: string;
+}
+
 interface Program {
   id: string;
   title: string;
@@ -414,15 +421,30 @@ export default function Usuarios() {
     if (!confirm('¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.')) return;
 
     try {
-      const { error } = await supabase.auth.admin.deleteUser(userId);
-      if (error) throw error;
-
-      setUsers(users.filter(u => u.id !== userId));
-      toast({
-        title: "Usuario eliminado",
-        description: "El usuario ha sido eliminado exitosamente"
+      // ✅ USA SOLO RPC - No uses fetch ni admin endpoints
+      const { data, error } = await supabase.rpc('delete_user_simple', {
+        user_id: userId
       });
+
+      if (error) {
+        console.error('Error RPC:', error);
+        throw new Error(error.message);
+      }
+
+      // data ya es el objeto JSONB que devuelve la función
+      const result = data;
+
+      if (result.success) {
+        setUsers(users.filter(u => u.id !== userId));
+        toast({
+          title: "Usuario eliminado",
+          description: `${result.message}: ${result.email}`
+        });
+      } else {
+        throw new Error(result.error || 'Error desconocido');
+      }
     } catch (error: any) {
+      console.error('Error eliminando usuario:', error);
       toast({
         title: "Error",
         description: error.message || "No se pudo eliminar el usuario",

@@ -122,10 +122,10 @@ export default function Admin() {
         const { data } = await supabase.from('lesson_progress').select('user_id').gte('updated_at', weekAgo).limit(10000);
         ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
       } else if (kind === 'usersInPrograms' || kind === 'programs') {
-        const { data } = await supabase.from('enrollments').select('user_id').eq('status', 'active').limit(20000);
+        const { data } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active').limit(20000);
         ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
       } else if (kind === 'usersInIndividual' || kind === 'courses') {
-        const { data } = await supabase.from('assignments').select('user_id').eq('status', 'active').limit(20000);
+        const { data } = await supabase.from('assignments').select('user_id').limit(20000);
         ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
       } else if (kind === 'newWeek') {
         const { data } = await supabase.from('profiles').select('id').gte('created_at', weekAgo).limit(20000);
@@ -143,7 +143,7 @@ export default function Admin() {
         const { data } = await supabase.from('profiles').select('id').eq('role', 'teacher').limit(20000);
         ids = (data || []).map((r: any) => r.id);
       } else if (kind === 'totalVolunteers') {
-        const { data } = await supabase.from('profiles').select('id').eq('role', 'voluntario').limit(20000);
+        const { data } = await supabase.from('profiles').select('id').eq('role', 'student').limit(20000);
         ids = (data || []).map((r: any) => r.id);
       } else if (kind === 'activeStudentsMonth') {
         const { data: lp } = await supabase.from('lesson_progress').select('user_id').gte('updated_at', monthAgo).limit(20000);
@@ -169,7 +169,7 @@ export default function Admin() {
 
       // Programas y cursos asociados
       const [{ data: enr }, { data: cenr }] = await Promise.all([
-        supabase.from('enrollments').select('user_id, programs(title)').in('user_id', ids),
+        supabase.from('course_enrollments').select('user_id, courses(title)').in('user_id', ids),
         supabase.from('assignments').select('user_id, courses(title)').in('user_id', ids),
       ]);
       const programsByUser: Record<string, string[]> = {};
@@ -213,6 +213,18 @@ export default function Admin() {
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/activity?${params.toString()}`, {
           headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
         });
+        
+        // Verificar que la respuesta sea OK
+        if (!resp.ok) {
+          throw new Error(`HTTP error! status: ${resp.status}`);
+        }
+        
+        // Verificar que sea JSON
+        const contentType = resp.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('La respuesta no es JSON');
+        }
+        
         const json = await resp.json();
         if (json?.success && json?.data) {
           setActivity(prev => ({ ...prev, ...json.data }));
@@ -226,7 +238,7 @@ export default function Admin() {
       const { count: courseCount } = await supabase.from('courses').select('*', { count: 'exact', head: true });
 
       // Distinct users in programs (active)
-      const { data: enrs } = await supabase.from('enrollments').select('user_id').eq('status', 'active');
+      const { data: enrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
       const usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
 
       // Distinct users in individual courses (active) - Only count if courses exist
@@ -249,7 +261,7 @@ export default function Admin() {
       // Totales por rol
       const { count: totalStudents } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
       const { count: totalTeachers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
-      const { count: totalVolunteers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'voluntario');
+      const { count: totalVolunteers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
 
       // Top courses by watched_minutes (lesson_progress joined to lessons->courses)
       // limitar por rango si está definido
@@ -357,6 +369,8 @@ export default function Admin() {
         topCourseMinutes,
         topProgramTitle,
         topProgramMinutes,
+        activeUsersList: [],
+        activeUsers20List: [],
       });
 
       // Calcular estudiantes activos último mes

@@ -734,6 +734,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_user_simple: {
+        Args: { user_id: string }
+        Returns: {
+          success: boolean
+          message?: string
+          error?: string
+          email?: string
+        }
+      }
       get_course_progress: {
         Args: { _course_id: string; _user_id: string }
         Returns: {
