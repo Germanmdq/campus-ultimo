@@ -1,44 +1,40 @@
--- Script para hacer administrador a germangonzalezmdq@gmail.com
--- Ejecutar en la consola SQL de Supabase
+-- 🔑 HACER ADMINISTRADOR A germangonzalezmdq@gmail.com
+-- Ejecutar en Supabase SQL Editor
 
--- 1. Verificar si el usuario existe
+-- 1️⃣ AGREGAR COLUMNA ROLE SI NO EXISTE
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'student';
+
+-- 2️⃣ Verificar usuario actual
 SELECT 
+    u.id,
     u.email,
     p.role,
-    p.full_name,
-    u.created_at
+    p.full_name
 FROM auth.users u
-LEFT JOIN profiles p ON u.id = p.id
+LEFT JOIN public.profiles p ON p.id = u.id
 WHERE u.email = 'germangonzalezmdq@gmail.com';
 
--- 2. Si el usuario existe, actualizar su rol a admin
-UPDATE profiles 
-SET role = 'admin' 
+-- 3️⃣ Actualizar rol a administrador
+UPDATE public.profiles 
+SET 
+    role = 'admin',
+    updated_at = NOW()
 WHERE id = (
     SELECT id FROM auth.users 
     WHERE email = 'germangonzalezmdq@gmail.com'
 );
 
--- 3. Si el usuario no existe en profiles, crear el perfil
-INSERT INTO profiles (id, full_name, role, created_at, updated_at)
+-- 3️⃣ Verificar cambio
 SELECT 
     u.id,
-    'Germán González',
-    'admin',
-    NOW(),
-    NOW()
-FROM auth.users u
-WHERE u.email = 'germangonzalezmdq@gmail.com'
-AND NOT EXISTS (
-    SELECT 1 FROM profiles p WHERE p.id = u.id
-);
-
--- 4. Verificar el resultado
-SELECT 
     u.email,
     p.role,
     p.full_name,
-    u.created_at
+    p.updated_at
 FROM auth.users u
-LEFT JOIN profiles p ON u.id = p.id
+LEFT JOIN public.profiles p ON p.id = u.id
 WHERE u.email = 'germangonzalezmdq@gmail.com';
+
+-- 4️⃣ Mensaje de confirmación
+SELECT '✅ Usuario germangonzalezmdq@gmail.com ahora es administrador' as resultado;
