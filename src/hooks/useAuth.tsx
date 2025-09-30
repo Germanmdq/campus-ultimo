@@ -33,8 +33,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // Función para mapear roles
+  const mapRole = (r: string) => {
+    if (r === 'teacher' || r === 'profesor') return 'formador' as const;
+    if (r === 'administrador') return 'admin' as const;
+    if (r === 'estudiante') return 'student' as const;
+    if (r === 'voluntariuo') return 'voluntario' as const; // corregir typo
+    return r as any;
+  };
+
+  // Función para obtener perfil
+  const fetchProfile = async (userId: string, userEmail?: string) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
+      }
+
+      if (profile) {
+        return {
+          ...profile,
+          email: userEmail,
+          role: mapRole(profile.role)
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error en fetch profile:', error);
+      return null;
+    }
+  };
+
   useEffect(() => {
-    // Set up auth state listener first
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth event:', event);
@@ -60,38 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user) {
           // Fetch profile data
-          setTimeout(async () => {
-            try {
-              const { data: profile, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', session.user.id)
-                .single();
-              
-              if (error) {
-                console.error('Error fetching profile:', error);
-                setProfile(null);
-              } else {
-                // Map old role values to new ones and add email
-                const mapRole = (r: string) => {
-                  if (r === 'teacher' || r === 'profesor') return 'formador' as const;
-                  if (r === 'administrador') return 'admin' as const;
-                  if (r === 'estudiante') return 'student' as const;
-                  if (r === 'voluntariuo') return 'voluntario' as const; // corregir typo
-                  return r as any;
-                };
-                const mappedProfile = profile ? {
-                  ...profile,
-                  email: session.user.email,
-                  role: mapRole(profile.role)
-                } : null;
-                setProfile(mappedProfile);
-              }
-            } catch (error) {
-              console.error('Error en fetch profile:', error);
-              setProfile(null);
-            }
-          }, 0);
+          const profile = await fetchProfile(session.user.id, session.user.email);
+          setProfile(profile);
         } else {
           setProfile(null);
         }
@@ -100,41 +108,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        // Fetch profile for existing session
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data: profile, error }) => {
-            if (!error && profile) {
-              // Map old role values to new ones and add email
-              const mapRole = (r: string) => {
-                if (r === 'teacher' || r === 'profesor') return 'formador' as const;
-                if (r === 'administrador') return 'admin' as const;
-                if (r === 'estudiante') return 'student' as const;
-                if (r === 'voluntariuo') return 'voluntario' as const; // corregir typo
-                return r as any;
-              };
-              const mappedProfile = {
-                ...profile,
-                email: session.user.email,
-                role: mapRole(profile.role)
-              };
-              setProfile(mappedProfile);
-            }
-            setLoading(false);
-          });
-      } else {
+    // Check for existing session
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          setLoading(false);
+          return;
+        }
+
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          const profile = await fetchProfile(session.user.id, session.user.email);
+          setProfile(profile);
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error initializing auth:', error);
         setLoading(false);
       }
-    });
+    };
+
+    initializeAuth();
 
     return () => subscription.unsubscribe();
   }, []);
