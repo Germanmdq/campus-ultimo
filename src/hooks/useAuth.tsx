@@ -2,11 +2,20 @@ import { useState, useEffect, createContext, useContext, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../integrations/supabase/client'
 
+interface Profile {
+  id: string
+  full_name: string
+  role: 'admin' | 'teacher' | 'student' | 'formador'
+  email?: string
+}
+
 interface AuthContextType {
   user: User | null
   session: Session | null
+  profile: Profile | null
   loading: boolean
   signOut: () => Promise<void>
+  signIn: (email: string, password: string) => Promise<{ error: any }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -14,7 +23,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Función para obtener el perfil del usuario
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      
+      if (error) {
+        console.error('Error obteniendo perfil:', error)
+        return null
+      }
+      return data
+    } catch (error) {
+      console.error('Error en fetchProfile:', error)
+      return null
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -28,9 +58,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('Error obteniendo sesión:', error)
             setUser(null)
             setSession(null)
+            setProfile(null)
           } else {
             setSession(session)
             setUser(session?.user ?? null)
+            
+            // Obtener perfil si hay usuario
+            if (session?.user) {
+              const profileData = await fetchProfile(session.user.id)
+              setProfile(profileData)
+            }
           }
           setLoading(false)
         }
@@ -39,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (mounted) {
           setUser(null)
           setSession(null)
+          setProfile(null)
           setLoading(false)
         }
       }
@@ -47,12 +85,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getInitialSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth event:', event)
+      async (event, session) => {
+        console.log('Auth event:', event, session ? 'with session' : 'no session')
         
         if (mounted) {
           setSession(session)
           setUser(session?.user ?? null)
+          
+          // Obtener perfil si hay usuario
+          if (session?.user) {
+            const profileData = await fetchProfile(session.user.id)
+            setProfile(profileData)
+          } else {
+            setProfile(null)
+          }
+          
           setLoading(false)
         }
       }
@@ -64,12 +111,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const signIn = async (email: string, password: string) => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+      
+      if (error) {
+        return { error }
+      }
+      
+      // El perfil se obtendrá automáticamente en el onAuthStateChange
+      return { error: null }
+    } catch (error) {
+      console.error('Error en signIn:', error)
+      return { error }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const signOut = async () => {
     try {
       setLoading(true)
       await supabase.auth.signOut()
       setUser(null)
       setSession(null)
+      setProfile(null)
     } catch (error) {
       console.error('Error en signOut:', error)
     } finally {
@@ -80,8 +150,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = {
     user,
     session,
+    profile,
     loading,
-    signOut
+    signOut,
+    signIn
   }
 
   return (
