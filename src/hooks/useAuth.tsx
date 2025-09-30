@@ -37,36 +37,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth event:', event);
+        
         setSession(session);
         setUser(session?.user ?? null);
+        
+        // Manejar eventos específicos
+        if (event === 'SIGNED_OUT') {
+          setProfile(null);
+          // Limpiar localStorage
+          localStorage.clear();
+          sessionStorage.clear();
+          // Redirigir al login si no estamos ya ahí
+          if (!window.location.pathname.includes('/login')) {
+            navigate('/login');
+          }
+        }
+
+        if (event === 'TOKEN_REFRESHED') {
+          console.log('✅ Token refrescado exitosamente');
+        }
         
         if (session?.user) {
           // Fetch profile data
           setTimeout(async () => {
-            const { data: profile, error } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-            
-            if (error) {
-              console.error('Error fetching profile:', error);
+            try {
+              const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+              
+              if (error) {
+                console.error('Error fetching profile:', error);
+                setProfile(null);
+              } else {
+                // Map old role values to new ones and add email
+                const mapRole = (r: string) => {
+                  if (r === 'teacher' || r === 'profesor') return 'formador' as const;
+                  if (r === 'administrador') return 'admin' as const;
+                  if (r === 'estudiante') return 'student' as const;
+                  if (r === 'voluntariuo') return 'voluntario' as const; // corregir typo
+                  return r as any;
+                };
+                const mappedProfile = profile ? {
+                  ...profile,
+                  email: session.user.email,
+                  role: mapRole(profile.role)
+                } : null;
+                setProfile(mappedProfile);
+              }
+            } catch (error) {
+              console.error('Error en fetch profile:', error);
               setProfile(null);
-            } else {
-              // Map old role values to new ones and add email
-              const mapRole = (r: string) => {
-                if (r === 'teacher' || r === 'profesor') return 'formador' as const;
-                if (r === 'administrador') return 'admin' as const;
-                if (r === 'estudiante') return 'student' as const;
-                if (r === 'voluntariuo') return 'voluntario' as const; // corregir typo
-                return r as any;
-              };
-              const mappedProfile = profile ? {
-                ...profile,
-                email: session.user.email,
-                role: mapRole(profile.role)
-              } : null;
-              setProfile(mappedProfile);
             }
           }, 0);
         } else {
@@ -161,8 +184,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
+      
+      // Limpiar estado local
+      setUser(null);
+      setProfile(null);
+      setSession(null);
+      
+      // Limpiar localStorage
+      localStorage.clear();
+      sessionStorage.clear();
+      
       navigate('/');
     } catch (error) {
+      console.error('Error cerrando sesión:', error);
       toast({
         title: "Error",
         description: "Error al cerrar sesión",
