@@ -652,6 +652,7 @@ export default function Usuarios() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
+                        console.log('Abriendo perfil para usuario:', user.id, user.full_name);
                         setSelectedUserId(user.id);
                         setShowUserProfile(true);
                       }}

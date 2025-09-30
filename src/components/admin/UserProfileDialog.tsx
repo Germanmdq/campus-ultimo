@@ -66,7 +66,9 @@ export function UserProfileDialog({ open, onOpenChange, userId }: UserProfileDia
   const [selectedLessonId, setSelectedLessonId] = useState<string>('');
 
   useEffect(() => {
+    console.log('UserProfileDialog useEffect:', { open, userId });
     if (open && userId) {
+      console.log('Fetching user data for:', userId);
       fetchUserData();
     }
   }, [open, userId]);
@@ -442,6 +444,8 @@ export function UserProfileDialog({ open, onOpenChange, userId }: UserProfileDia
     );
   }
 
+  console.log('UserProfileDialog render:', { open, userId, profile });
+  
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -451,7 +455,7 @@ export function UserProfileDialog({ open, onOpenChange, userId }: UserProfileDia
             <User className="h-5 w-5" />
             Perfil de Usuario
           </DialogTitle>
-          <DialogDescription>Información completa del estudiante seleccion ado.</DialogDescription>
+          <DialogDescription>Información completa del estudiante seleccionado.</DialogDescription>
         </DialogHeader>
 
         <div className="flex justify-end mb-2">
