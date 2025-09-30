@@ -98,7 +98,7 @@ serve(async (req) => {
           .in('user_id', ids)
           .limit(500), // Limit to prevent timeouts
         admin
-          .from('course_enrollments')
+          .from('assignments')
           .select('user_id, courses(title)')
           .eq('status', 'active')
           .in('user_id', ids)

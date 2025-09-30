@@ -125,7 +125,7 @@ export default function Admin() {
         const { data } = await supabase.from('enrollments').select('user_id').eq('status', 'active').limit(20000);
         ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
       } else if (kind === 'usersInIndividual' || kind === 'courses') {
-        const { data } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active').limit(20000);
+        const { data } = await supabase.from('assignments').select('user_id').eq('status', 'active').limit(20000);
         ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
       } else if (kind === 'newWeek') {
         const { data } = await supabase.from('profiles').select('id').gte('created_at', weekAgo).limit(20000);
@@ -170,7 +170,7 @@ export default function Admin() {
       // Programas y cursos asociados
       const [{ data: enr }, { data: cenr }] = await Promise.all([
         supabase.from('enrollments').select('user_id, programs(title)').in('user_id', ids),
-        supabase.from('course_enrollments').select('user_id, courses(title)').in('user_id', ids),
+        supabase.from('assignments').select('user_id, courses(title)').in('user_id', ids),
       ]);
       const programsByUser: Record<string, string[]> = {};
       (enr || []).forEach((row: any) => {
