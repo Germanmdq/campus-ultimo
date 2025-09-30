@@ -294,7 +294,7 @@ export default function Usuarios() {
           throw new Error(data.error);
         }
 
-        if (!data?.user?.id) {
+        if (!data?.success || !data?.user?.id) {
           console.error('Datos de usuario no válidos:', data);
           throw new Error('No se pudo obtener el ID del usuario creado');
         }
