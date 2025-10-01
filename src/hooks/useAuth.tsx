@@ -50,13 +50,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true
     let subscription: any = null
 
-  const initializeAuth = async () => {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession()
-      
-      if (mounted) {
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (!mounted) return
+
         if (error) {
           console.error('Error obteniendo sesión:', error)
+          
           // Limpiar localStorage si hay error de refresh token
           if (error.message?.includes('Refresh Token') || 
               error.message?.includes('Invalid Refresh Token') ||
@@ -64,26 +66,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               error.status === 400) {
             console.log('Limpiando localStorage debido a token inválido')
             localStorage.clear()
-            // NO recargar la página, solo limpiar estado
             setUser(null)
             setSession(null)
             setProfile(null)
-            setLoading(false)
-            return // Salir temprano para evitar setLoading(false) duplicado
+          } else {
+            setUser(null)
+            setSession(null)
+            setProfile(null)
           }
-          setUser(null)
-          setSession(null)
-          setProfile(null)
         } else {
-            setSession(session)
-            setUser(session?.user ?? null)
-            
-            // Obtener perfil si hay usuario
-            if (session?.user) {
-              const profileData = await fetchProfile(session.user.id)
+          setSession(session)
+          setUser(session?.user ?? null)
+          
+          // Obtener perfil si hay usuario
+          if (session?.user) {
+            const profileData = await fetchProfile(session.user.id)
+            if (mounted) {
               setProfile(profileData)
             }
           }
+        }
+        
+        if (mounted) {
           setLoading(false)
         }
       } catch (error) {
@@ -97,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Solo ejecutar una vez
+    // Ejecutar inicialización
     initializeAuth()
 
     // Configurar listener de cambios de auth
@@ -105,44 +109,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         if (!mounted) return
         
-        // Solo procesar eventos importantes para evitar loops
-        if (event === 'INITIAL_SESSION') return // Ya manejado en initializeAuth
-        if (event === 'TOKEN_REFRESHED') {
-          // Solo actualizar la sesión, no el perfil
-          setSession(session)
+        console.log('Auth event:', event, session ? 'with session' : 'no session')
+        
+        // Ignorar evento inicial - ya fue manejado en initializeAuth
+        if (event === 'INITIAL_SESSION') {
           return
         }
         
-        console.log('Auth event:', event, session ? 'with session' : 'no session')
-        
-        setSession(session)
-        setUser(session?.user ?? null)
-        
-        // Obtener perfil solo en eventos importantes (SIGNED_IN, SIGNED_OUT)
-        if (event === 'SIGNED_IN' && session?.user) {
-          const profileData = await fetchProfile(session.user.id)
-          setProfile(profileData)
-        } else if (event === 'SIGNED_OUT') {
-          setProfile(null)
+        // Solo actualizar sesión en TOKEN_REFRESHED, sin tocar perfil ni user
+        if (event === 'TOKEN_REFRESHED') {
+          if (mounted) {
+            setSession(session)
+          }
+          return
         }
         
-        setLoading(false)
+        // Para otros eventos importantes
+        if (mounted) {
+          setSession(session)
+          setUser(session?.user ?? null)
+          
+          // Obtener perfil solo en SIGNED_IN
+          if (event === 'SIGNED_IN' && session?.user) {
+            const profileData = await fetchProfile(session.user.id)
+            if (mounted) {
+              setProfile(profileData)
+            }
+          } else if (event === 'SIGNED_OUT') {
+            setProfile(null)
+          }
+        }
       }
     )
 
     subscription = authSubscription
 
+    // ✅ Cleanup dentro del useEffect
     return () => {
       mounted = false
       if (subscription) {
         subscription.unsubscribe()
       }
     }
-  }, [])
+  }, []) // ✅ Array vacío - solo ejecutar una vez
 
   const signIn = async (email: string, password: string) => {
     try {
-      setLoading(true)
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -157,22 +169,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error en signIn:', error)
       return { error }
-    } finally {
-      setLoading(false)
     }
   }
 
   const signOut = async () => {
     try {
-      setLoading(true)
       await supabase.auth.signOut()
       setUser(null)
       setSession(null)
       setProfile(null)
     } catch (error) {
       console.error('Error en signOut:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
