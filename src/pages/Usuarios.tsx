@@ -191,7 +191,9 @@ export default function Usuarios() {
 
       const roleFilter = (u: any) => {
         if (filterRole === 'todos') return true;
-        const mapped = u.role === 'teacher' ? 'formador' : u.role;
+        // Mapeo completo de roles DB -> UI
+        let mapped = u.role;
+        if (u.role === 'teacher') mapped = 'formador';
         return mapped === filterRole;
       };
       const searchFilter = (u: any) => {
@@ -607,12 +609,6 @@ export default function Usuarios() {
                   <SelectItem value="admin">Administradores</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-                <Filter className="h-4 w-4 mr-2" />
-                Filtros
-              </Button>
             </div>
           </div>
         </CardContent>

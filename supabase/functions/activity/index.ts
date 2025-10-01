@@ -30,13 +30,23 @@ serve(async (req) => {
       supabase.from('courses').select('*', { count: 'exact', head: true }),
     ]);
 
-    // Distinct users in programs and individual courses (active)
-    const [{ data: enrs }, { data: cenrs }] = await Promise.all([
-      supabase.from('enrollments').select('user_id').eq('status', 'active'),
-      supabase.from('course_enrollments').select('user_id').eq('status', 'active'),
-    ]);
-    const usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
-    const usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+    // Distinct users in programs and individual courses (active) - with error handling for RLS
+    let usersInPrograms = 0;
+    let usersInIndividual = 0;
+    
+    try {
+      const { data: enrs } = await supabase.from('enrollments').select('user_id').eq('status', 'active');
+      usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
+    } catch (e) {
+      console.warn('Error fetching enrollments:', e);
+    }
+    
+    try {
+      const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
+      usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+    } catch (e) {
+      console.warn('Error fetching course_enrollments:', e);
+    }
 
     // New users last periods
     const now = new Date();

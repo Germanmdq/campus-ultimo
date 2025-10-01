@@ -1,0 +1,29 @@
+/* Solución para los warnings de CSS */
+
+/* Arreglar el problema de -webkit-text-size-adjust */
+html {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Arreglar selectores problemáticos */
+body {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* Remover cualquier selector inválido que pueda estar causando problemas */
+* {
+  box-sizing: border-box;
+}
+
+/* Optimizar para desarrollo */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -82,7 +82,7 @@ export default function CourseDetail() {
         .from('courses')
         .select(`
           *,
-          program_courses!inner (program_id)
+          program_courses (program_id)
         `)
         .eq('id', courseId)
         .single();
@@ -156,7 +156,7 @@ export default function CourseDetail() {
         }
         
         // Add new association
-        if (editForm.program_id) {
+        if (editForm.program_id && editForm.program_id !== 'no-program') {
           const { error: associationError } = await supabase
             .from('program_courses')
             .insert({
@@ -181,7 +181,7 @@ export default function CourseDetail() {
         slug: editForm.slug,
         poster_2x3_url: editForm.poster_2x3_url,
         wide_11x6_url: editForm.wide_11x6_url,
-        program_id: editForm.program_id
+        program_id: editForm.program_id === 'no-program' ? null : editForm.program_id
       });
       setEditing(false);
     } catch (error: any) {
@@ -342,7 +342,7 @@ export default function CourseDetail() {
                         <SelectValue placeholder="Seleccionar programa" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Sin programa</SelectItem>
+                        <SelectItem value="no-program">Sin programa</SelectItem>
                         {programs.map(program => (
                           <SelectItem key={program.id} value={program.id}>
                             {program.title}
@@ -435,14 +435,19 @@ export default function CourseDetail() {
                 <CardTitle>Acciones Rápidas</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button className="w-full" variant="outline">
+                <Button 
+                  className="w-full" 
+                  variant="outline"
+                  onClick={() => navigate('/lecciones')}
+                >
                   <BookOpen className="h-4 w-4 mr-2" />
                   Ver Lecciones
                 </Button>
-                <Button className="w-full" variant="outline">
-                  Gestionar Contenido
-                </Button>
-                <Button className="w-full" variant="outline">
+                <Button 
+                  className="w-full" 
+                  variant="outline"
+                  onClick={() => navigate('/usuarios')}
+                >
                   Ver Estudiantes
                 </Button>
               </CardContent>

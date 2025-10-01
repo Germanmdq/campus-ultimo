@@ -107,12 +107,17 @@ export default function Lecciones() {
       // Calcular aprobaciones PENDIENTES reales (assignments en estado submitted/reviewing)
       const lessonIds = (lessonsData || []).map((l: any) => l.id);
       if (lessonIds.length > 0) {
-        const { count } = await supabase
-          .from('assignments')
-          .select('*', { count: 'exact', head: true })
-          .in('lesson_id', lessonIds)
-          .in('status', ['submitted', 'reviewing']);
-        setPendingApprovals(count || 0);
+        try {
+          const { count } = await supabase
+            .from('assignments')
+            .select('*', { count: 'exact', head: true })
+            .in('lesson_id', lessonIds)
+            .in('status', ['submitted', 'reviewing']);
+          setPendingApprovals(count || 0);
+        } catch (error) {
+          console.warn('Error fetching assignments (RLS issue):', error);
+          setPendingApprovals(0);
+        }
       } else {
         setPendingApprovals(0);
       }

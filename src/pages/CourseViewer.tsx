@@ -449,6 +449,19 @@ export default function CourseViewer() {
 
         {/* Lista de Lecciones */}
         <div className="space-y-4">
+          {/* Progreso del Curso */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-center">
+                <p className="text-sm font-medium mb-2">Progreso del Curso</p>
+                 <div className="w-full bg-muted rounded-full h-2 mb-2">
+                   <div className="bg-accent h-2 rounded-full" style={{ width: `${(completedLessons / course.lessons.length) * 100}%` }}></div>
+                 </div>
+                 <p className="text-xs text-muted-foreground">{completedLessons} de {course.lessons.length} lecciones completadas</p>
+              </div>
+            </CardContent>
+          </Card>
+          
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Lecciones del Curso</CardTitle>
@@ -505,19 +518,6 @@ export default function CourseViewer() {
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-
-          {/* Progreso del Curso */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-center">
-                <p className="text-sm font-medium mb-2">Progreso del Curso</p>
-                 <div className="w-full bg-muted rounded-full h-2 mb-2">
-                   <div className="bg-accent h-2 rounded-full" style={{ width: `${(completedLessons / course.lessons.length) * 100}%` }}></div>
-                 </div>
-                 <p className="text-xs text-muted-foreground">{completedLessons} de {course.lessons.length} lecciones completadas</p>
-              </div>
             </CardContent>
           </Card>
         </div>

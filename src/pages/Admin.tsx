@@ -122,8 +122,13 @@ export default function Admin() {
         const { data } = await supabase.from('lesson_progress').select('user_id').gte('updated_at', weekAgo).limit(10000);
         ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
       } else if (kind === 'usersInPrograms' || kind === 'programs') {
-        const { data } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active').limit(20000);
-        ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
+        try {
+          const { data } = await supabase.from('course_enrollments').select('user_id').limit(20000);
+          ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
+        } catch (error) {
+          console.warn('Error fetching course_enrollments for active users:', error);
+          ids = [];
+        }
       } else if (kind === 'usersInIndividual' || kind === 'courses') {
         const { data } = await supabase.from('assignments').select('user_id').limit(20000);
         ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
@@ -168,10 +173,19 @@ export default function Admin() {
       }
 
       // Programas y cursos asociados
-      const [{ data: enr }, { data: cenr }] = await Promise.all([
-        supabase.from('course_enrollments').select('user_id, courses(title)').in('user_id', ids),
-        supabase.from('assignments').select('user_id, courses(title)').in('user_id', ids),
-      ]);
+      let enr = null, cenr = null;
+      try {
+        const [enrResult, cenrResult] = await Promise.all([
+          supabase.from('course_enrollments').select('user_id, courses(title)').in('user_id', ids),
+          supabase.from('assignments').select('user_id, courses(title)').in('user_id', ids),
+        ]);
+        enr = enrResult.data;
+        cenr = cenrResult.data;
+      } catch (error) {
+        console.warn('Error fetching course enrollments and assignments:', error);
+        enr = [];
+        cenr = [];
+      }
       const programsByUser: Record<string, string[]> = {};
       (enr || []).forEach((row: any) => {
         const uid = row.user_id; const title = row.programs?.title;
@@ -205,7 +219,9 @@ export default function Admin() {
   const fetchActivity = async (start?: string, end?: string) => {
     try {
       setActivityLoading(true);
-      // Intentar vía Edge Function unificada (read-only). Si falla, usar fallback local
+      
+      // ❌ COMENTADO - Edge Function no existe o devuelve HTML
+      /*
       const params = new URLSearchParams();
       if (start) params.set('start', start);
       if (end) params.set('end', end);
@@ -214,12 +230,10 @@ export default function Admin() {
           headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
         });
         
-        // Verificar que la respuesta sea OK
         if (!resp.ok) {
           throw new Error(`HTTP error! status: ${resp.status}`);
         }
         
-        // Verificar que sea JSON
         const contentType = resp.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
           throw new Error('La respuesta no es JSON');
@@ -233,19 +247,31 @@ export default function Admin() {
       } catch (e) {
         console.warn('Edge activity fallback:', e);
       }
+      */
+      
+      // ✅ Ir directo al código de fallback local
       // Programs count
       const { count: progCount } = await supabase.from('programs').select('*', { count: 'exact', head: true });
       const { count: courseCount } = await supabase.from('courses').select('*', { count: 'exact', head: true });
 
-      // Distinct users in programs (active)
-      const { data: enrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
-      const usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
+      // Distinct users in programs (active) - with RLS error handling
+      let usersInPrograms = 0;
+      try {
+        const { data: enrs } = await supabase.from('course_enrollments').select('user_id');
+        usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
+      } catch (error) {
+        console.warn('Error fetching course_enrollments (RLS issue):', error);
+      }
 
       // Distinct users in individual courses (active) - Only count if courses exist
       let usersInIndividual = 0;
       if (courseCount && courseCount > 0) {
-      const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
-        usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+        try {
+          const { data: cenrs } = await supabase.from('course_enrollments').select('user_id');
+          usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+        } catch (error) {
+          console.warn('Error fetching individual course enrollments (RLS issue):', error);
+        }
       }
 
       // New users by period from profiles.created_at
@@ -469,10 +495,6 @@ export default function Admin() {
           >
             <BookOpen className="h-4 w-4" />
             Asignar Cursos
-          </Button>
-          <Button className="gap-2" variant="outline" onClick={() => window.open('/cuenta', '_blank')}>
-            <Settings className="h-4 w-4" />
-            Configuración
           </Button>
         </div>
       </div>

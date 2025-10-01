@@ -77,7 +77,7 @@ export default function Auth() {
       const { error } = await supabase.auth.signInWithOtp({
         email: email,
         options: {
-          emailRedirectTo: `${window.location.origin}/`
+          emailRedirectTo: 'https://campus.espaciodegeometriasagrada.com/'
         }
       });
 

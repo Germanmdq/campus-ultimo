@@ -66,16 +66,21 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   }, [courseId]);
 
   const fetchCourses = async () => {
-    const { data } = await supabase
-      .from('courses')
-      .select(`
-        id, 
-        title,
-        program:programs (title)
-      `)
-      .order('title');
-    
-    setCourses(data || []);
+    try {
+      const { data } = await supabase
+        .from('courses')
+        .select(`
+          id, 
+          title,
+          program:programs (title)
+        `)
+        .order('title');
+      
+      setCourses(data || []);
+    } catch (error) {
+      console.warn('Error fetching courses (RLS issue):', error);
+      setCourses([]);
+    }
   };
 
   const fetchPrerequisites = async () => {

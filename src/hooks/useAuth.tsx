@@ -57,11 +57,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) {
         if (error) {
           console.error('Error obteniendo sesión:', error)
-          // Limpiar localStorage si hay error de autenticación
-          if (error.message?.includes('400') || error.status === 400) {
-            console.log('Limpiando localStorage debido a error 400')
-            localStorage.removeItem('supabase.auth.token')
+          // Limpiar localStorage si hay error de refresh token
+          if (error.message?.includes('Refresh Token') || 
+              error.message?.includes('Invalid Refresh Token') ||
+              error.message?.includes('400') || 
+              error.status === 400) {
+            console.log('Limpiando localStorage debido a token inválido')
             localStorage.clear()
+            // Forzar recarga para limpiar estado
+            window.location.reload()
           }
           setUser(null)
           setSession(null)
@@ -96,6 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return
+        
+        // Solo procesar eventos importantes para evitar loops
+        if (event === 'INITIAL_SESSION') return // Ya manejado en initializeAuth
         
         console.log('Auth event:', event, session ? 'with session' : 'no session')
         
