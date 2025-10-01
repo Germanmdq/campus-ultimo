@@ -218,7 +218,10 @@ export default function ProgramDetail() {
     return (
       <div className="text-center py-8">
         <p className="text-destructive">Programa no encontrado</p>
-        <Button onClick={() => navigate('/programas')} className="mt-4">
+        <Button onClick={() => {
+          console.log('Botón Volver a Programas clickeado');
+          navigate('/programas');
+        }} className="mt-4">
           Volver a Programas
         </Button>
       </div>

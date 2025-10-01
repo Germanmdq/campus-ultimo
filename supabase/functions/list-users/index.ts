@@ -90,26 +90,40 @@ serve(async (req) => {
     // OPTIMIZED: Only fetch enrollments if we have search terms or need program counts
     if (filtered.length > 0 && (search || returnAll)) {
       const ids = filtered.map(u => u.id);
-      const [{ data: enrs }, { data: cenrs }] = await Promise.all([
-        admin
-          .from('enrollments')
-          .select('user_id, programs(title)')
-          .eq('status', 'active')
-          .in('user_id', ids)
-          .limit(500), // Limit to prevent timeouts
+      
+      // Fetch enrollments and assignments with error handling for RLS
+      let enrs: any[] = [];
+      let cenrs: any[] = [];
+      
+      try {
+        const [{ data: enrollmentsData }, { data: assignmentsData }] = await Promise.all([
+          admin
+            .from('enrollments')
+            .select('user_id, programs(title)')
+            .eq('status', 'active')
+            .in('user_id', ids)
+            .limit(500), // Limit to prevent timeouts
         admin
           .from('assignments')
           .select('user_id, courses(title)')
-          .eq('status', 'active')
           .in('user_id', ids)
           .limit(500) // Limit to prevent timeouts
-      ]);
+        ]);
+        
+        enrs = enrollmentsData || [];
+        cenrs = assignmentsData || [];
+      } catch (error) {
+        console.warn('Error fetching enrollments/assignments (RLS issue):', error);
+        // Continue with empty arrays if RLS blocks access
+        enrs = [];
+        cenrs = [];
+      }
       
       const programCountByUser: Record<string, number> = {};
       const programsByUser: Record<string, string[]> = {};
       const coursesByUser: Record<string, string[]> = {};
       
-      (enrs || []).forEach((e: any) => {
+      enrs.forEach((e: any) => {
         const uid = e.user_id;
         if (!uid) return;
         programCountByUser[uid] = (programCountByUser[uid] || 0) + 1;
@@ -119,7 +133,7 @@ serve(async (req) => {
         }
       });
       
-      (cenrs || []).forEach((e: any) => {
+      cenrs.forEach((e: any) => {
         const uid = e.user_id;
         if (!uid) return;
         if (e.courses?.title) {

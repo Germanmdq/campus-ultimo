@@ -111,8 +111,7 @@ export default function Lecciones() {
           const { count } = await supabase
             .from('assignments')
             .select('*', { count: 'exact', head: true })
-            .in('lesson_id', lessonIds)
-            .in('status', ['submitted', 'reviewing']);
+            .in('lesson_id', lessonIds);
           setPendingApprovals(count || 0);
         } catch (error) {
           console.warn('Error fetching assignments (RLS issue):', error);

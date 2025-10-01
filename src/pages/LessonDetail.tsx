@@ -206,7 +206,10 @@ export default function LessonDetail() {
     return (
       <div className="text-center py-8">
         <p className="text-destructive">Lección no encontrada</p>
-        <Button onClick={() => navigate('/lecciones')} className="mt-4">
+        <Button onClick={() => {
+          console.log('Botón Volver a Lecciones clickeado');
+          navigate('/lecciones');
+        }} className="mt-4">
           Volver a Lecciones
         </Button>
       </div>

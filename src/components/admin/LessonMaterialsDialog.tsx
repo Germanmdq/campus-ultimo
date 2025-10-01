@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { MaterialsList } from '@/components/MaterialsList';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +36,7 @@ export function LessonMaterialsDialog({
   const [materials, setMaterials] = useState<Material[]>([]);
   const [newMaterial, setNewMaterial] = useState({
     title: '',
-    type: 'link' as 'file' | 'link',
+    type: 'file' as 'file' | 'link',
     url: '',
     file: null as File | null
   });
@@ -46,6 +47,13 @@ export function LessonMaterialsDialog({
   useEffect(() => {
     if (open) {
       fetchMaterials();
+      // Reset form when dialog opens
+      setNewMaterial({
+        title: '',
+        type: 'file',
+        url: '',
+        file: null
+      });
     }
   }, [open, lessonId]);
 
@@ -53,11 +61,12 @@ export function LessonMaterialsDialog({
     try {
       const { data, error } = await supabase
         .from('lesson_materials')
-        .select('*')
+        .select('id, title, material_type, file_url, url, sort_order')
         .eq('lesson_id', lessonId)
         .order('sort_order');
 
       if (error) throw error;
+      
       setMaterials(data || []);
     } catch (error: any) {
       toast({
@@ -71,20 +80,24 @@ export function LessonMaterialsDialog({
   const handleFileUpload = async (file: File): Promise<string | null> => {
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
+      const fileName = `${crypto.randomUUID()}-${file.name}`;
       const filePath = `materials/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('materials')
-        .upload(filePath, file);
+        .upload(filePath, file, { upsert: false });
 
       if (uploadError) throw uploadError;
 
+      // Generar URL de descarga (no preview)
       const { data } = supabase.storage
         .from('materials')
         .getPublicUrl(filePath);
 
-      return data.publicUrl;
+      // Agregar parámetro download para forzar descarga
+      const downloadUrl = `${data.publicUrl}?download=${encodeURIComponent(file.name)}`;
+      
+      return downloadUrl;
     } catch (error) {
       console.error('Error uploading file:', error);
       return null;
@@ -137,9 +150,9 @@ export function LessonMaterialsDialog({
       const insertData = {
         lesson_id: lessonId,
         title: newMaterial.title.trim(),
-        type: newMaterial.type,
-        file_url: fileUrl,
-        url: url,
+        material_type: newMaterial.type, // 'file' o 'link'
+        file_url: newMaterial.type === 'file' ? fileUrl : null, // Solo para archivos
+        url: newMaterial.type === 'link' ? url : null, // Solo para enlaces
         sort_order: materials.length + 1
       };
 
@@ -221,6 +234,9 @@ export function LessonMaterialsDialog({
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Materiales - {lessonTitle}</DialogTitle>
+          <DialogDescription>
+            Agrega archivos o enlaces para esta lección
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 flex-1 overflow-hidden">
@@ -232,7 +248,7 @@ export function LessonMaterialsDialog({
               <div>
                 <Label>Título</Label>
                 <Input
-                  value={newMaterial.title}
+                  value={newMaterial.title || ''}
                   onChange={(e) => setNewMaterial({ ...newMaterial, title: e.target.value })}
                   placeholder="Nombre del material"
                 />
@@ -245,11 +261,11 @@ export function LessonMaterialsDialog({
                   onValueChange={(value: 'file' | 'link') => setNewMaterial({ ...newMaterial, type: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Seleccionar tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="link">Enlace URL</SelectItem>
                     <SelectItem value="file">Archivo</SelectItem>
+                    <SelectItem value="link">Enlace URL</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -259,7 +275,7 @@ export function LessonMaterialsDialog({
                   <Label>URL</Label>
                   <Input
                     type="url"
-                    value={newMaterial.url}
+                    value={newMaterial.url || ''}
                     onChange={(e) => setNewMaterial({ ...newMaterial, url: e.target.value })}
                     placeholder="https://..."
                   />
@@ -293,50 +309,23 @@ export function LessonMaterialsDialog({
                 <p className="text-sm mt-2">Agrega el primer material usando el formulario de arriba</p>
               </div>
             ) : (
-              materials.map(material => (
-                <Card key={material.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {getMaterialIcon(material.type)}
-                        <div>
-                          <h4 className="font-medium">{material.title}</h4>
-                          <Badge variant="secondary" className="text-xs">
-                            {material.type === 'file' ? 'Archivo' : 'Enlace'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {material.type === 'link' && material.url && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => window.open(material.url, '_blank')}
-                          >
-                            Abrir
-                          </Button>
-                        )}
-                        {material.type === 'file' && material.file_url && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => window.open(material.file_url, '_blank')}
-                          >
-                            Descargar
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleDeleteMaterial(material.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+              materials.map(material => {
+                return (
+                <div key={material.id} className="relative">
+                  <div className="pr-12">
+                    <MaterialsList materials={[material]} />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="absolute top-2 right-2"
+                    onClick={() => handleDeleteMaterial(material.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                );
+              })
             )}
           </div>
         </div>

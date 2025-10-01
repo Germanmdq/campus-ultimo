@@ -234,7 +234,10 @@ export default function CourseDetail() {
     return (
       <div className="text-center py-8">
         <p className="text-destructive">Curso no encontrado</p>
-        <Button onClick={() => navigate('/cursos')} className="mt-4">
+        <Button onClick={() => {
+          console.log('Botón Volver a Cursos clickeado');
+          navigate('/cursos');
+        }} className="mt-4">
           Volver a Cursos
         </Button>
       </div>

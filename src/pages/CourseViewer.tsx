@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileText, Link as LinkIcon } from 'lucide-react';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { ArrowLeft, PlayCircle, CheckCircle, Clock, BookOpen, Loader2 } from 'lucide-react';
+import MaterialsSection from '@/components/MaterialsSection';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -42,7 +43,7 @@ export default function CourseViewer() {
   const { toast } = useToast();
   const [course, setCourse] = useState<Course | null>(null);
   const [currentLesson, setCurrentLesson] = useState(0);
-  const [materials, setMaterials] = useState<Array<{ id: string; title: string; type: 'file' | 'link'; file_url?: string | null; url?: string | null }>>([]);
+  const [materials, setMaterials] = useState<Array<{ id: string; title: string | null; material_type: 'file' | 'link' | 'video' | null; file_url: string | null; url: string | null }>>([]);
   const [loading, setLoading] = useState(true);
   const canSubmitActions = !!profile && (profile.role === 'student' || profile.role === 'admin' || profile.role === 'formador');
   // Popup de descripción removido; descripción se muestra inline
@@ -153,9 +154,10 @@ export default function CourseViewer() {
       if (firstLesson) {
         const { data: materialsData } = await supabase
           .from('lesson_materials')
-          .select('*')
+          .select('id, title, material_type, file_url, url, sort_order')
           .eq('lesson_id', firstLesson.id)
           .order('sort_order');
+        console.log("🔍 MATERIALS DATA:", materialsData);
         setMaterials(materialsData || []);
       } else {
         setMaterials([]);
@@ -181,7 +183,7 @@ export default function CourseViewer() {
       (async () => {
         const { data: materialsData } = await supabase
           .from('lesson_materials')
-          .select('*')
+          .select('id, title, material_type, file_url, url, sort_order')
           .eq('lesson_id', lesson.id)
           .order('sort_order');
         setMaterials(materialsData || []);
@@ -311,9 +313,12 @@ export default function CourseViewer() {
         <h2 className="text-xl font-semibold mb-2">No hay lecciones disponibles</h2>
         <p className="text-muted-foreground mb-4">Este curso aún no tiene lecciones publicadas.</p>
         <Button onClick={() => {
+          console.log('Botón Volver clickeado', { fromProgram, programSlug });
           if (fromProgram && programSlug) {
+            console.log('Navegando a programa:', `/programas/${programSlug}`);
             navigate(`/programas/${programSlug}`);
           } else {
+            console.log('Navegando a mis-programas');
             navigate('/mis-programas');
           }
         }}>
@@ -390,25 +395,22 @@ export default function CourseViewer() {
                     <FileText className="h-4 w-4" />
                     <span className="font-medium">Materiales</span>
                   </div>
-                  {materials.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        {m.type === 'file' ? <FileText className="h-4 w-4" /> : <LinkIcon className="h-4 w-4" />}
-                        <div>
-                          <h4 className="font-medium">{m.title}</h4>
-                          <Badge variant="secondary" className="text-xs">
-                            {m.type === 'file' ? 'Archivo' : 'Enlace'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <Button size="sm" onClick={() => {
-                        const url = m.type === 'file' ? m.file_url : m.url;
-                        if (url) window.open(url, '_blank');
-                      }}>
-                        {m.type === 'file' ? 'Descargar' : 'Abrir'}
-                      </Button>
-                    </div>
-                  ))}
+                  {console.log("🔍 RENDERIZANDO MATERIALS SECTION con:", materials)}
+                  <MaterialsSection materials={materials} />
+                  
+                  {/* TEST VISUAL DIRECTO */}
+                  <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 rounded">
+                    <h4 className="font-bold text-yellow-800">🧪 TEST DIRECTO:</h4>
+                    <p className="text-sm text-yellow-700">Si ves esto, el componente se está renderizando</p>
+                    <a 
+                      href="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf?download=dummy.pdf"
+                      className="inline-block mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      🔗 Test PDF (debería abrir)
+                    </a>
+                  </div>
                 </div>
               )}
 

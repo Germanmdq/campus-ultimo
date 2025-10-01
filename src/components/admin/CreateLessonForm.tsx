@@ -145,7 +145,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
     try {
       const base = generateSlug(title.trim());
       const uniqueSlug = await ensureUniqueLessonSlug(base, courseId);
-      // 1. Crear la lección SIN course_id (usar sistema many-to-many)
+      // 1. Crear la lección CON course_id (requerido por la tabla)
       const { data, error } = await supabase
         .from('lessons')
         .insert([{
@@ -160,7 +160,8 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
           approval_form_url: requiresApproval ? (approvalFormUrl.trim() || null) : null,
           prerequisite_lesson_id: (prerequisiteId && prerequisiteId !== 'none') ? prerequisiteId : null,
           has_materials: hasMaterials,
-          sort_order: prerequisites.length + 1
+          sort_order: prerequisites.length + 1,
+          course_id: courseId // ✅ AGREGAR course_id requerido
         }])
         .select('id')
         .single();
