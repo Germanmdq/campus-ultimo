@@ -69,7 +69,7 @@ export default function CourseViewer() {
   const programSlug = searchParams.get('programa');
 
   useEffect(() => {
-    if (courseId) {
+    if (courseId && profile?.id) {
       fetchCourse();
     }
   }, [courseId, profile?.id]);
@@ -157,7 +157,6 @@ export default function CourseViewer() {
           .select('id, title, material_type, file_url, url, sort_order')
           .eq('lesson_id', firstLesson.id)
           .order('sort_order');
-        console.log("🔍 MATERIALS DATA:", materialsData);
         setMaterials(materialsData || []);
       } else {
         setMaterials([]);
@@ -395,7 +394,6 @@ export default function CourseViewer() {
                     <FileText className="h-4 w-4" />
                     <span className="font-medium">Materiales</span>
                   </div>
-                  {console.log("🔍 RENDERIZANDO MATERIALS SECTION con:", materials)}
                   <MaterialsSection materials={materials} />
                   
                   {/* TEST VISUAL DIRECTO */}

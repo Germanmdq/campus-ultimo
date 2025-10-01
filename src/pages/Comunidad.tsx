@@ -818,7 +818,6 @@ export default function Comunidad() {
 
   const fetchReplies = async (postId: string) => {
     try {
-      console.log('🔍 fetchReplies - postId:', postId);
       
       // Primero obtener las respuestas
       const { data, error } = await supabase
@@ -836,8 +835,6 @@ export default function Comunidad() {
         .eq('post_id', postId)
         .order('created_at', { ascending: true });
 
-      console.log('🔍 fetchReplies - data:', data);
-      console.log('🔍 fetchReplies - error:', error);
 
       if (error) throw error;
 
@@ -851,15 +848,12 @@ export default function Comunidad() {
 
       // Obtener los archivos por separado
       const replyIds = validReplies.map((r: any) => r.id);
-      console.log('🔍 fetchReplies - replyIds:', replyIds);
       
       const { data: filesData, error: filesError } = await supabase
         .from('forum_reply_files' as any)
         .select('*')
         .in('reply_id', replyIds);
 
-      console.log('🔍 fetchReplies - filesData:', filesData);
-      console.log('🔍 fetchReplies - filesError:', filesError);
 
       if (filesError) {
         console.error('Error fetching files:', filesError);
@@ -885,7 +879,6 @@ export default function Comunidad() {
         };
       });
 
-      console.log('🔍 fetchReplies - processedReplies:', processedReplies);
 
       setReplies(prev => ({
         ...prev,

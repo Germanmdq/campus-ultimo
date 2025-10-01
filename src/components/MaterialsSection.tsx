@@ -23,8 +23,6 @@ function ensureDownloadUrl(url: string, filename: string) {
 }
 
 export default function MaterialsSection({ materials }: { materials: Material[] }) {
-  console.log("🔍 MATERIALS SECTION - materials:", materials);
-  
   return (
     <div className="space-y-2">
       {/* TEST VISUAL DIRECTO */}
@@ -42,19 +40,15 @@ export default function MaterialsSection({ materials }: { materials: Material[] 
         </a>
       </div>
       
-      {materials?.map((m) => {
-        console.log("🔍 MATERIAL:", m);
-        
-        // Si hay datos viejos sin material_type, deducimos por las URLs
-        const mt = m.material_type ?? (m.file_url ? "file" : m.url ? "link" : "link");
-        const isFile = mt === "file" && !!m.file_url;
-        const isLink = mt === "link" && !!m.url;
+              {materials?.map((m) => {
+                // Si hay datos viejos sin material_type, deducimos por las URLs
+                const mt = m.material_type ?? (m.file_url ? "file" : m.url ? "link" : "link");
+                const isFile = mt === "file" && !!m.file_url;
+                const isLink = mt === "link" && !!m.url;
 
-        // href final
-        const rawHref = isFile ? (m.file_url as string) : isLink ? (m.url as string) : "";
-        const href = isFile ? ensureDownloadUrl(rawHref, m.title || "material") : rawHref;
-
-        console.log("🔍 MATERIAL PROCESSED:", { mt, isFile, isLink, href });
+                // href final
+                const rawHref = isFile ? (m.file_url as string) : isLink ? (m.url as string) : "";
+                const href = isFile ? ensureDownloadUrl(rawHref, m.title || "material") : rawHref;
 
         return (
           <div key={m.id} className="flex items-center justify-between rounded-xl border px-4 py-3">
@@ -70,10 +64,9 @@ export default function MaterialsSection({ materials }: { materials: Material[] 
               // ⬇️ ANCLA REAL con estilo de botón. Esto abre sí o sí.
               <a
                 href={href}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  console.log("🚀 CLICK EN MATERIAL:", { href, isFile });
-                }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
                 className={buttonVariants({ size: "sm", variant: "secondary" })}
                 {...(isFile ? { download: "" } : { target: "_blank", rel: "noopener noreferrer" })}
               >

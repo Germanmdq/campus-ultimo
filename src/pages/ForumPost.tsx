@@ -56,7 +56,6 @@ export default function ForumPost() {
   // Función simplificada para cargar respuestas
   const fetchReplies = async (postId: string) => {
     try {
-      console.log('🔍 fetchReplies - postId:', postId);
       
       // Obtener respuestas
       const { data: repliesData, error: repliesError } = await supabase
@@ -79,7 +78,6 @@ export default function ForumPost() {
         throw repliesError;
       }
 
-      console.log('🔍 fetchReplies - repliesData:', repliesData);
 
       if (!repliesData || repliesData.length === 0) {
         setPost(prev => ({ ...prev, replies: [] }));
@@ -88,14 +86,12 @@ export default function ForumPost() {
 
       // Obtener archivos de todas las respuestas
       const replyIds = repliesData.map((r: any) => r.id);
-      console.log('🔍 fetchReplies - replyIds:', replyIds);
       
       const { data: filesData, error: filesError } = await supabase
         .from('forum_reply_files' as any)
         .select('*')
         .in('reply_id', replyIds);
 
-      console.log('🔍 fetchReplies - filesData:', filesData);
       
       if (filesError) {
         console.error('❌ Error fetching files:', filesError);
@@ -121,7 +117,6 @@ export default function ForumPost() {
         };
       });
 
-      console.log('🔍 fetchReplies - processedReplies:', processedReplies);
 
       setPost(prev => ({
         ...prev,

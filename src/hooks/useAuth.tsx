@@ -64,8 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               error.status === 400) {
             console.log('Limpiando localStorage debido a token inválido')
             localStorage.clear()
-            // Forzar recarga para limpiar estado
-            window.location.reload()
+            // NO recargar la página, solo limpiar estado
+            setUser(null)
+            setSession(null)
+            setProfile(null)
+            setLoading(false)
+            return // Salir temprano para evitar setLoading(false) duplicado
           }
           setUser(null)
           setSession(null)
@@ -103,17 +107,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Solo procesar eventos importantes para evitar loops
         if (event === 'INITIAL_SESSION') return // Ya manejado en initializeAuth
+        if (event === 'TOKEN_REFRESHED') {
+          // Solo actualizar la sesión, no el perfil
+          setSession(session)
+          return
+        }
         
         console.log('Auth event:', event, session ? 'with session' : 'no session')
         
         setSession(session)
         setUser(session?.user ?? null)
         
-        // Obtener perfil si hay usuario
-        if (session?.user) {
+        // Obtener perfil solo en eventos importantes (SIGNED_IN, SIGNED_OUT)
+        if (event === 'SIGNED_IN' && session?.user) {
           const profileData = await fetchProfile(session.user.id)
           setProfile(profileData)
-        } else {
+        } else if (event === 'SIGNED_OUT') {
           setProfile(null)
         }
         

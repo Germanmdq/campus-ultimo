@@ -33,17 +33,6 @@ export default function MaterialRow({ m }: { m: Material }) {
   const label  = isFile ? "Archivo" : isLink ? "Enlace" : "Sin tipo";
   const action = isFile ? "Descargar" : isLink ? "Abrir" : "N/A";
 
-  // 🔎 Debug: verificá que haya <a href=...>
-  console.log("🔍 MATERIAL ROW DEBUG:", { 
-    id: m.id, 
-    material_type: m.material_type,
-    mt, 
-    isFile, 
-    isLink,
-    href, 
-    file: m.file_url, 
-    url: m.url 
-  });
 
   return (
     <div className="flex items-center justify-between rounded-xl border px-4 py-3">
@@ -60,10 +49,9 @@ export default function MaterialRow({ m }: { m: Material }) {
         <a
           data-qa="material-link"
           href={href}
-          onClick={(e) => {
-            e.stopPropagation();
-            console.log("🚀 CLICK EN MATERIAL:", { href, action, isFile });
-          }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
           className={buttonVariants({ size: "sm", variant: "secondary" })}
           {...(isFile ? { download: "" } : { target: "_blank", rel: "noopener noreferrer" })}
         >
