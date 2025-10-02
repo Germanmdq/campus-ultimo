@@ -14,7 +14,7 @@ interface Event {
   description?: string;
   start_at: string;
   end_at: string;
-  visibility: 'all' | 'students' | 'teachers';
+  target_scope: 'all' | 'students' | 'teachers';
   meeting_url?: string;
   created_by: string;
 }
@@ -34,7 +34,7 @@ export function EditEventForm({ event, open, onOpenChange, onSuccess }: EditEven
     description: '',
     start_at: '',
     end_at: '',
-    visibility: 'all' as 'all' | 'students' | 'teachers',
+    target_scope: 'all' as 'all' | 'students' | 'teachers',
     meeting_url: ''
   });
 
@@ -45,7 +45,7 @@ export function EditEventForm({ event, open, onOpenChange, onSuccess }: EditEven
         description: event.description || '',
         start_at: event.start_at ? new Date(event.start_at).toISOString().slice(0, 16) : '',
         end_at: event.end_at ? new Date(event.end_at).toISOString().slice(0, 16) : '',
-        visibility: event.visibility || 'all',
+        target_scope: event.target_scope || 'all',
         meeting_url: event.meeting_url || ''
       });
     }
