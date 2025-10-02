@@ -60,35 +60,20 @@ export default function Calendario() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      // Clean up old events first
-      await cleanupOldEvents();
+      // await cleanupOldEvents(); // ✅ Comentar esta línea
       
-      let dataRes = null as any; let errorRes = null as any;
-      try {
-        // Ocultar eventos pasados: desde el comienzo del día actual
-        const todayStart = new Date();
-        todayStart.setHours(0,0,0,0);
-        const { data, error } = await supabase
-          .from('events')
-          .select('*')
-          .gte('end_at', todayStart.toISOString())
-          .order('start_at', { ascending: true });
-        dataRes = data; errorRes = error;
-      } catch (e) { errorRes = e; }
-
-      if (errorRes) {
-        // Fallback sin ordenar por columna inexistente (si aplica)
-        const todayStart = new Date();
-        todayStart.setHours(0,0,0,0);
-        const { data } = await supabase
-          .from('events')
-          .select('*')
-          .gte('end_at', todayStart.toISOString());
-        setEvents(data || []);
-      } else {
-        setEvents(dataRes || []);
-      }
+      const todayStart = new Date();
+      todayStart.setHours(0,0,0,0);
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .gte('end_at', todayStart.toISOString())
+        .order('start_at', { ascending: true });
+        
+      if (error) throw error;
+      setEvents(data || []);
     } catch (error: any) {
+      console.error('Error fetching events:', error);
       toast({ title: "Error", description: "No se pudieron cargar los eventos", variant: "destructive" });
     } finally {
       setLoading(false);

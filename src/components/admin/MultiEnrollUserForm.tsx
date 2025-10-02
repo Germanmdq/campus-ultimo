@@ -168,7 +168,7 @@ export function MultiEnrollUserForm({ open, onOpenChange, onSuccess }: MultiEnro
       if (enrollments.length > 0) {
         const { error } = await supabase
           .from('enrollments')
-          .upsert(enrollments, { onConflict: 'user_id,program_id' });
+          .upsert(enrollments);
 
         if (error) throw error;
       }
@@ -196,7 +196,7 @@ export function MultiEnrollUserForm({ open, onOpenChange, onSuccess }: MultiEnro
 
           const { error: courseEnrollmentError } = await supabase
             .from('course_enrollments')
-            .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+            .upsert(courseEnrollments);
 
         }
       }
@@ -212,7 +212,7 @@ export function MultiEnrollUserForm({ open, onOpenChange, onSuccess }: MultiEnro
 
         const { error: courseError } = await supabase
           .from('course_enrollments')
-          .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+          .upsert(courseEnrollments);
 
         if (courseError) {
           console.error('Error enrolling in individual courses:', courseError);

@@ -68,96 +68,56 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
     e.preventDefault();
     if (!profile?.id) return;
 
-    // Validaciones normales según alcance
     if (scope === 'program' && !programId) {
-      toast({ title: 'Falta seleccionar programa', description: 'Elegí el programa destino', variant: 'destructive' });
+      toast({ title: 'Falta seleccionar programa', variant: 'destructive' });
       return;
     }
     if (scope === 'course' && !courseId) {
-      toast({ title: 'Falta seleccionar curso', description: 'Elegí el curso destino', variant: 'destructive' });
+      toast({ title: 'Falta seleccionar curso', variant: 'destructive' });
       return;
     }
 
     setLoading(true);
-    try {
-      const startDateTime = new Date(`${startDate}T${startTime}:00.000Z`);
-      const endDateTime = new Date(`${endDate}T${endTime}:00.000Z`);
+    
+    const startDateTime = new Date(`${startDate}T${startTime}:00`);
+    const endDateTime = new Date(`${endDate}T${endTime}:00`);
 
-      // Payload con columnas nuevas
-      const fullPayload: any = {
-        title,
-        description,
-        start_at: startDateTime.toISOString(),
-        end_at: endDateTime.toISOString(),
-        target_scope: target_scope as any,
-        meeting_url: meetingUrl || null,
-        created_by: profile.id,
-        target_scope: scope,
-        program_id: scope === 'program' ? (programId || null) : null,
-        course_id: scope === 'course' ? (courseId || null) : null,
-      };
+    const payload = {
+      title,
+      description: description || null,
+      start_at: startDateTime.toISOString(),
+      end_at: endDateTime.toISOString(),
+      target_scope,
+      meeting_url: meetingUrl || null,
+      created_by: profile.id,
+      program_id: scope === 'program' ? programId : null,
+      course_id: scope === 'course' ? courseId : null,
+    };
 
-      // Payload básico sin columnas nuevas
-      const basicPayload: any = {
-        title,
-        start_at: startDateTime.toISOString(),
-        end_at: endDateTime.toISOString(),
-        target_scope: target_scope as any,
-        created_by: profile.id,
-      };
+    console.log('Payload:', payload);
 
-      let createdOk = false;
-      let usedFallback = false;
+    const { data, error } = await supabase.from('events').insert(payload);
 
-      // Intento con columnas nuevas
-      try {
-        const { error } = await supabase.from('events').insert(fullPayload);
-        if (error) throw error;
-        createdOk = true;
-      } catch (err: any) {
-        // Si falla por columnas inexistentes, reintentar con payload básico
-        const msg: string = err?.message || '';
-        if (/column\s+"?(target_scope|program_id|course_id)"?\s+of relation\s+"?events"?/i.test(msg)) {
-          const { error: e2 } = await supabase.from('events').insert(basicPayload);
-          if (e2) throw e2;
-          createdOk = true;
-          usedFallback = true;
-        } else {
-          throw err;
-        }
-      }
+    console.log('Response data:', data);
+    console.log('Response error:', error);
 
-      if (!createdOk) throw new Error('unknown_error');
-
+    if (error) {
+      console.error('SUPABASE ERROR:', error);
       toast({
-        title: "Evento creado exitosamente",
-        description: `${usedFallback ? 'Guardado como evento de campus (falta migración de eventos). ' : ''}Se ha enviado la notificación a ${
-          target_scope === 'all' ? 'usuarios' : 
-          target_scope === 'students' ? 'estudiantes' : 'profesores'
-        } (${scope === 'campus' ? 'todo el campus' : scope === 'program' ? 'programa' : 'curso'})`,
-      });
-
-      resetForm();
-      onOpenChange(false);
-      onSuccess?.();
-    } catch (error: any) {
-      const msg: string = error?.message || '';
-      let description = msg;
-      if (/column\s+"?(target_scope|program_id|course_id|description|meeting_url)"?\s+of relation\s+"?events"?/i.test(msg)) {
-        description = 'Hay que aplicar la migración de eventos (target_scope/program_id/course_id).';
-      } else if (/violates foreign key constraint/i.test(msg)) {
-        description = 'El programa/curso seleccionado no existe. Actualizá la lista y volvé a intentar.';
-      } else if (/invalid input syntax for type uuid/i.test(msg)) {
-        description = 'ID inválido para programa/curso. Elegí una opción de la lista.';
-      }
-      toast({
-        title: "Error al crear evento",
-        description,
+        title: "Error",
+        description: error.message,
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
+      return;
     }
+
+    console.log('Success!');
+    toast({ title: "Evento creado" });
+    resetForm();
+    onOpenChange(false);
+    onSuccess?.();
+    setLoading(false);
   };
 
   const getVisibilityIcon = (vis: string) => {
@@ -318,7 +278,7 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
           </div>
 
           <div>
-            <Label htmlFor="visibility">Visibilidad del Evento</Label>
+            <Label htmlFor="target_scope">Alcance del Evento</Label>
             <Select value={target_scope} onValueChange={(value: any) => setTargetScope(value)}>
               <SelectTrigger>
                 <SelectValue />

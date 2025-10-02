@@ -4,6 +4,7 @@ import { useDebounce } from './useDebounce';
 interface User {
   id: string;
   name: string;
+  full_name: string;
   email: string;
   role: string;
   programs?: string[];
@@ -15,7 +16,15 @@ interface UseUserSearchOptions {
   minSearchLength?: number;
 }
 
-export function useUserSearch(options: UseUserSearchOptions = {}) {
+export function useUserSearch(options: UseUserSearchOptions = {}): {
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  users: User[];
+  loading: boolean;
+  error: string | null;
+  autocompleteOptions: Array<{ value: string; label: string; description: string }>;
+  searchUsers: (term: string) => Promise<void>;
+} {
   const { debounceMs = 300, minSearchLength = 2 } = options;
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,6 +71,7 @@ export function useUserSearch(options: UseUserSearchOptions = {}) {
         const userList = (json.data.users || []).map((u: any) => ({
           id: u.id,
           name: u.full_name || u.email?.split('@')[0] || 'Sin nombre',
+          full_name: u.full_name || u.email?.split('@')[0] || 'Sin nombre',
           email: u.email || '',
           role: u.role || 'student',
           programs: u.programs || [],

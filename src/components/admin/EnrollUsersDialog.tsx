@@ -101,7 +101,7 @@ export function EnrollUsersDialog({
 
       const { error } = await supabase
         .from('enrollments')
-        .upsert(enrollments, { onConflict: 'user_id,program_id' });
+        .upsert(enrollments);
 
       if (error) throw error;
 

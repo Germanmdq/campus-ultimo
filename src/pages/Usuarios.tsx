@@ -333,7 +333,7 @@ export default function Usuarios() {
 
         const { error: programError } = await supabase
           .from('enrollments')
-          .upsert(programEnrollments, { onConflict: 'user_id,program_id' });
+          .upsert(programEnrollments);
 
         if (programError) throw programError;
 
@@ -361,7 +361,7 @@ export default function Usuarios() {
 
             const { error: courseEnrollmentError } = await supabase
               .from('course_enrollments')
-              .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+              .upsert(courseEnrollments);
 
             if (courseEnrollmentError) {
               console.warn(`Error enrolling in courses for program ${programId}:`, courseEnrollmentError);
@@ -380,7 +380,7 @@ export default function Usuarios() {
 
         const { error: courseError } = await supabase
           .from('course_enrollments')
-          .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+          .upsert(courseEnrollments);
 
         if (courseError) throw courseError;
       }

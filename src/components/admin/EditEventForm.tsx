@@ -64,7 +64,7 @@ export function EditEventForm({ event, open, onOpenChange, onSuccess }: EditEven
           description: formData.description.trim() || null,
           start_at: formData.start_at,
           end_at: formData.end_at,
-          visibility: formData.visibility,
+          target_scope: formData.target_scope,
           meeting_url: formData.meeting_url.trim() || null
         })
         .eq('id', event.id);
@@ -142,11 +142,11 @@ export function EditEventForm({ event, open, onOpenChange, onSuccess }: EditEven
           </div>
 
           <div>
-            <Label htmlFor="visibility">Visibilidad</Label>
+            <Label htmlFor="target_scope">Alcance</Label>
             <Select
-              value={formData.visibility}
+              value={formData.target_scope}
               onValueChange={(value: 'all' | 'students' | 'teachers') => 
-                setFormData(prev => ({ ...prev, visibility: value }))
+                setFormData(prev => ({ ...prev, target_scope: value }))
               }
             >
               <SelectTrigger>

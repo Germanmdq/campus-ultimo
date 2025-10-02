@@ -29,6 +29,7 @@ interface Course {
 interface User {
   id: string;
   name: string;
+  full_name: string;
   email: string;
   role: string;
   programs?: string[];
@@ -166,7 +167,7 @@ export default function InscribirUsuario() {
           .insert({
             id: userId,
             full_name: newName,
-            role: newRole
+            role: newRole as 'student' | 'teacher' | 'admin'
           });
 
         if (profileError) throw profileError;
@@ -177,12 +178,12 @@ export default function InscribirUsuario() {
         const programEnrollments = selectedPrograms.map(programId => ({
           user_id: userId,
           program_id: programId,
-          status: 'active'
+          status: 'active' as const
         }));
 
         const { error: programError } = await supabase
           .from('enrollments')
-          .upsert(programEnrollments, { onConflict: 'user_id,program_id' });
+          .upsert(programEnrollments);
 
         if (programError) throw programError;
 
@@ -210,7 +211,7 @@ export default function InscribirUsuario() {
 
             const { error: courseEnrollmentError } = await supabase
               .from('course_enrollments')
-              .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+              .upsert(courseEnrollments);
 
             if (courseEnrollmentError) {
               console.warn(`Error enrolling in courses for program ${programId}:`, courseEnrollmentError);
@@ -224,12 +225,12 @@ export default function InscribirUsuario() {
         const courseEnrollments = selectedCourses.map(courseId => ({
           user_id: userId,
           course_id: courseId,
-          status: 'active'
+          status: 'active' as const
         }));
 
         const { error: courseError } = await supabase
           .from('course_enrollments')
-          .upsert(courseEnrollments, { onConflict: 'user_id,course_id' });
+          .upsert(courseEnrollments);
 
         if (courseError) throw courseError;
       }
@@ -362,11 +363,11 @@ export default function InscribirUsuario() {
                       >
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="text-xs">
-                            {user.full_name.charAt(0).toUpperCase()}
+                            {user.name.charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{user.full_name}</p>
+                          <p className="font-medium text-sm truncate">{user.name}</p>
                           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                         </div>
                         <Badge className={getRoleColor(user.role)}>

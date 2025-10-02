@@ -114,7 +114,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
           user_id: selectedUser.id,
           program_id: programId,
           status: 'active'
-        }, { onConflict: 'user_id,program_id' });
+        });
 
       if (error) throw error;
 
