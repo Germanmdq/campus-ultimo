@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         console.log('🔄 Inicializando autenticación...')
         
-        // ✅ Timeout de seguridad: si la inicialización toma más de 10 segundos, hay un problema
+        // ✅ Timeout de seguridad: si la inicialización toma más de 30 segundos, hay un problema
         initTimeout = setTimeout(() => {
           if (!isInitialized.current) {
             console.error('🚨 TIMEOUT: Inicialización tomó demasiado tiempo. Limpiando...')
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               isInitialized.current = true
             }
           }
-        }, 10000)
+        }, 30000)
         
         // ✅ Verificar y limpiar tokens corruptos ANTES de getSession
         try {
