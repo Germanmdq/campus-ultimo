@@ -230,21 +230,21 @@ export default function Admin() {
       const { count: progCount } = await supabase.from('programs').select('*', { count: 'exact', head: true });
       const { count: courseCount } = await supabase.from('courses').select('*', { count: 'exact', head: true });
 
-      // Distinct users in programs (active) - with RLS error handling
+      // Distinct users in programs - with RLS error handling
       let usersInPrograms = 0;
       try {
-        const { data: enrs } = await supabase.from('enrollments').select('user_id').eq('status', 'active');
+        const { data: enrs } = await supabase.from('enrollments').select('user_id');
         usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
       } catch (error) {
         console.warn('Error fetching enrollments (RLS issue):', error);
       }
 
-      // Distinct users in individual courses (active) - Only count if courses exist
+      // Distinct users in individual courses - Only count if courses exist
       let usersInIndividual = 0;
       if (courseCount && courseCount > 0) {
         try {
-      const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
-        usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+          const { data: cenrs } = await supabase.from('course_enrollments').select('user_id');
+          usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
         } catch (error) {
           console.warn('Error fetching individual course enrollments (RLS issue):', error);
         }
