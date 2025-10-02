@@ -57,20 +57,29 @@ export function CreateCourseForProgramDialog({
 
     setLoading(true);
     try {
-      // Create course
+      // Create course (without program_id - that goes in program_courses)
       const { data: courseData, error: courseError } = await supabase
         .from('courses')
         .insert({
           title: title.trim(),
           summary: summary.trim() || null,
           slug: slug.trim(),
-          program_id: programId,
           sort_order: 0
         })
         .select()
         .single();
 
       if (courseError) throw courseError;
+
+      // Create program-course relationship
+      const { error: relationError } = await supabase
+        .from('program_courses')
+        .insert({
+          program_id: programId,
+          course_id: courseData.id
+        });
+
+      if (relationError) throw relationError;
 
       toast({
         title: "Curso creado",

@@ -23,7 +23,7 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
   const [startTime, setStartTime] = useState('');
   const [endDate, setEndDate] = useState('');
   const [endTime, setEndTime] = useState('');
-  const [visibility, setVisibility] = useState<'all' | 'students' | 'teachers'>('all');
+  const [target_scope, setTargetScope] = useState<'all' | 'students' | 'teachers'>('all');
   const [meetingUrl, setMeetingUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [scope, setScope] = useState<'campus' | 'program' | 'course'>('campus');
@@ -57,7 +57,7 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
     setStartTime('');
     setEndDate('');
     setEndTime('');
-    setVisibility('all');
+    setTargetScope('all');
     setMeetingUrl('');
     setScope('campus');
     setProgramId('');
@@ -89,7 +89,7 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
         description,
         start_at: startDateTime.toISOString(),
         end_at: endDateTime.toISOString(),
-        visibility: visibility as any,
+        target_scope: target_scope as any,
         meeting_url: meetingUrl || null,
         created_by: profile.id,
         target_scope: scope,
@@ -102,7 +102,7 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
         title,
         start_at: startDateTime.toISOString(),
         end_at: endDateTime.toISOString(),
-        visibility: visibility as any,
+        target_scope: target_scope as any,
         created_by: profile.id,
       };
 
@@ -132,8 +132,8 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
       toast({
         title: "Evento creado exitosamente",
         description: `${usedFallback ? 'Guardado como evento de campus (falta migración de eventos). ' : ''}Se ha enviado la notificación a ${
-          visibility === 'all' ? 'usuarios' : 
-          visibility === 'students' ? 'estudiantes' : 'profesores'
+          target_scope === 'all' ? 'usuarios' : 
+          target_scope === 'students' ? 'estudiantes' : 'profesores'
         } (${scope === 'campus' ? 'todo el campus' : scope === 'program' ? 'programa' : 'curso'})`,
       });
 
@@ -319,7 +319,7 @@ export function CreateEventForm({ open, onOpenChange, onSuccess }: CreateEventFo
 
           <div>
             <Label htmlFor="visibility">Visibilidad del Evento</Label>
-            <Select value={visibility} onValueChange={(value: any) => setVisibility(value)}>
+            <Select value={target_scope} onValueChange={(value: any) => setTargetScope(value)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

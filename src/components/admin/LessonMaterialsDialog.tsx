@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { MaterialsList } from '@/components/MaterialsList';
+import MaterialsSection from '@/components/MaterialsSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,10 +13,10 @@ import { useToast } from '@/hooks/use-toast';
 
 interface Material {
   id: string;
-  title: string;
-  type: 'file' | 'link';
-  file_url?: string;
-  url?: string;
+  title: string | null;
+  material_type: 'file' | 'link' | null;  // ✅ Cambiado de 'type' a 'material_type'
+  file_url?: string | null;
+  url?: string | null;
   sort_order: number;
 }
 
@@ -46,6 +46,7 @@ export function LessonMaterialsDialog({
 
   useEffect(() => {
     if (open) {
+      console.log('🔄 Dialog abierto, cargando materiales para lección:', lessonId);
       fetchMaterials();
       // Reset form when dialog opens
       setNewMaterial({
@@ -59,16 +60,23 @@ export function LessonMaterialsDialog({
 
   const fetchMaterials = async () => {
     try {
+      console.log('📥 Fetching materials for lesson:', lessonId);
+      
       const { data, error } = await supabase
         .from('lesson_materials')
         .select('id, title, material_type, file_url, url, sort_order')
         .eq('lesson_id', lessonId)
         .order('sort_order');
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching materials:', error);
+        throw error;
+      }
       
+      console.log('✅ Materiales obtenidos:', data?.length || 0, data);
       setMaterials(data || []);
     } catch (error: any) {
+      console.error('❌ Error completo:', error);
       toast({
         title: "Error",
         description: "No se pudieron cargar los materiales",
@@ -156,13 +164,14 @@ export function LessonMaterialsDialog({
         sort_order: materials.length + 1
       };
 
+      console.log('💾 Insertando material:', insertData);
 
       const { error } = await supabase
         .from('lesson_materials')
         .insert([insertData]);
 
       if (error) {
-        console.error('Database error inserting material:', error);
+        console.error('❌ Database error inserting material:', error);
         throw error;
       }
 
@@ -181,7 +190,7 @@ export function LessonMaterialsDialog({
       setNewMaterial({ title: '', type: 'link', url: '', file: null });
       fetchMaterials();
     } catch (error: any) {
-      console.error('Full error adding material:', error);
+      console.error('❌ Full error adding material:', error);
       toast({
         title: "Error",
         description: `No se pudo agregar el material: ${error.message}`,
@@ -310,10 +319,11 @@ export function LessonMaterialsDialog({
               </div>
             ) : (
               materials.map(material => {
+                console.log('🔹 Renderizando material en dialog:', material);
                 return (
                 <div key={material.id} className="relative">
                   <div className="pr-12">
-                    <MaterialsList materials={[material]} />
+                    <MaterialsSection materials={[material]} />
                   </div>
                   <Button
                     size="sm"

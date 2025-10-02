@@ -95,19 +95,28 @@ export default function LessonDetail() {
       
       setLesson(lessonWithCourse);
 
-      // Fetch materials ALWAYS - not depending on has_materials flag
-      const { data: materialsData, error: materialsError } = await supabase
-        .from('lesson_materials')
-        .select('*')
-        .eq('lesson_id', lessonData.id)
-        .order('sort_order');
-      
-      if (materialsError) {
-        console.error('Error fetching materials:', materialsError);
-      } else {
-      }
-      
-      setMaterials(materialsData || []);
+    // Fetch materials ALWAYS - not depending on has_materials flag
+    const { data: materialsData, error: materialsError } = await supabase
+      .from('lesson_materials')
+      .select('*')
+      .eq('lesson_id', lessonData.id)
+      .order('sort_order');
+    
+    if (materialsError) {
+      console.error('Error fetching materials:', materialsError);
+    }
+    
+    // ✅ MAPEAR material_type a type para que coincida con la interface Material
+    const mappedMaterials = (materialsData || []).map(m => ({
+      id: m.id,
+      title: m.title,
+      type: m.material_type as 'file' | 'link',  // ✅ Mapear material_type -> type
+      file_url: m.file_url,
+      url: m.url
+    }));
+    
+    console.log('✅ Materiales mapeados:', mappedMaterials);
+    setMaterials(mappedMaterials);
 
       // Check if the student already submitted an assignment
       if (profile && lessonData?.id) {

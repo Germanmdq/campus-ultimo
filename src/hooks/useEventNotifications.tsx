@@ -13,7 +13,7 @@ interface EventNotification {
     title: string;
     start_at: string;
     end_at: string;
-    visibility: string;
+    target_scope: string;
   };
 }
 
@@ -41,7 +41,7 @@ export const useEventNotifications = () => {
             title,
             start_at,
             end_at,
-            visibility
+            target_scope
           )
         `)
         .eq('user_id', user.id)

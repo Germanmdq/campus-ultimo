@@ -151,14 +151,24 @@ export default function CourseViewer() {
 
       // Load materials for the first/current lesson
       const firstLesson = lessonsWithProgress[0];
+      console.log('🔍 FIRST LESSON:', firstLesson);
+      
       if (firstLesson) {
-        const { data: materialsData } = await supabase
+        console.log('🔍 FETCHING MATERIALS FOR LESSON:', firstLesson.id);
+        const { data: materialsData, error: materialsError } = await supabase
           .from('lesson_materials')
           .select('id, title, material_type, file_url, url, sort_order')
           .eq('lesson_id', firstLesson.id)
           .order('sort_order');
+        
+        if (materialsError) {
+          console.error('❌ Error fetching materials:', materialsError);
+        } else {
+          console.log('✅ Materials fetched:', materialsData);
+        }
         setMaterials(materialsData || []);
       } else {
+        console.log('❌ No first lesson found');
         setMaterials([]);
       }
 

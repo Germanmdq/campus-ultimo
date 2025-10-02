@@ -17,9 +17,11 @@ interface Event {
   description?: string;
   start_at: string;
   end_at: string;
-  visibility: 'all' | 'students' | 'teachers';
+  target_scope: 'all' | 'students' | 'teachers';  // ✅ Cambiar de 'visibility'
   meeting_url?: string;
   created_by: string;
+  program_id?: string;
+  course_id?: string;
 }
 
 export default function Calendario() {
@@ -155,16 +157,16 @@ export default function Calendario() {
     });
   };
 
-  const getVisibilityColor = (visibility: string) => {
-    switch (visibility) {
+  const getVisibilityColor = (scope: string) => {
+    switch (scope) {
       case 'students': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300';
       case 'teachers': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300';
       default: return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-300';
     }
   };
 
-  const getVisibilityLabel = (visibility: string) => {
-    switch (visibility) {
+  const getVisibilityLabel = (scope: string) => {
+    switch (scope) {
       case 'students': return 'Estudiantes';
       case 'teachers': return 'Profesores';
       default: return 'Todos';
@@ -276,8 +278,8 @@ export default function Calendario() {
                       <span>{formatEventDate(event.start_at)} - {formatEventTime(event.start_at)}</span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge className={getVisibilityColor(event.visibility)}>
-                        {getVisibilityLabel(event.visibility)}
+                      <Badge className={getVisibilityColor(event.target_scope)}>
+                        {getVisibilityLabel(event.target_scope)}
                       </Badge>
                       {event.meeting_url && (
                         <Button 
@@ -428,7 +430,7 @@ export default function Calendario() {
               <Users className="h-4 w-4 text-green-600" />
               <span className="text-sm font-medium">Campus</span>
             </div>
-            <p className="text-2xl font-bold mt-2">{events.filter(e => e.visibility === 'all').length}</p>
+            <p className="text-2xl font-bold mt-2">{events.filter(e => e.target_scope === 'all').length}</p>
             <p className="text-xs text-muted-foreground">Para todos</p>
           </CardContent>
         </Card>
@@ -439,7 +441,7 @@ export default function Calendario() {
               <Users className="h-4 w-4 text-blue-600" />
               <span className="text-sm font-medium">Estudiantes</span>
             </div>
-            <p className="text-2xl font-bold mt-2">{events.filter(e => e.visibility === 'students').length}</p>
+            <p className="text-2xl font-bold mt-2">{events.filter(e => e.target_scope === 'students').length}</p>
             <p className="text-xs text-muted-foreground">Solo estudiantes</p>
           </CardContent>
         </Card>

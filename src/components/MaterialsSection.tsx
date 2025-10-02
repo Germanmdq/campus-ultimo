@@ -25,24 +25,14 @@ function ensureDownloadUrl(url: string, filename: string) {
 export default function MaterialsSection({ materials }: { materials: Material[] }) {
   return (
     <div className="space-y-2">
-      {/* TEST VISUAL DIRECTO */}
-      <div className="p-4 bg-red-100 border border-red-400 rounded">
-        <h4 className="font-bold text-red-800">🚨 TEST DIRECTO EN MATERIALS SECTION</h4>
-        <p className="text-sm text-red-700">Si ves esto, MaterialsSection se está renderizando</p>
-        <p className="text-sm text-red-700">Cantidad de materiales: {materials?.length || 0}</p>
-        <a 
-          href="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf?download=dummy.pdf"
-          className="inline-block mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          🔗 Test PDF (debería abrir)
-        </a>
-      </div>
-      
-              {materials?.map((m) => {
-                // Si hay datos viejos sin material_type, deducimos por las URLs
-                const mt = m.material_type ?? (m.file_url ? "file" : m.url ? "link" : "link");
+      {materials?.length === 0 ? (
+        <div className="text-center text-muted-foreground py-4">
+          <p>No hay materiales en esta lección</p>
+        </div>
+      ) : (
+        materials?.map((m) => {
+                // Priorizar material_type de la base de datos, luego deducir por URLs
+                const mt = m.material_type || (m.file_url ? "file" : m.url ? "link" : "link");
                 const isFile = mt === "file" && !!m.file_url;
                 const isLink = mt === "link" && !!m.url;
 
@@ -77,7 +67,8 @@ export default function MaterialsSection({ materials }: { materials: Material[] 
             )}
           </div>
         );
-      })}
+        })
+      )}
     </div>
   );
 }
