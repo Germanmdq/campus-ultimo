@@ -136,44 +136,7 @@ export default function Usuarios() {
     
     setLoading(true);
     try {
-      // Intentar servidor: Edge Function list-users (role y search server-side, paginado)
-      const params = new URLSearchParams();
-      const roleParam = filterRole === 'formador' ? 'teacher' : filterRole; // map UI->DB
-      params.set('role', roleParam);
-      if (debouncedSearchTerm) params.set('search', debouncedSearchTerm);
-      params.set('page', String(page));
-      params.set('pageSize', String(pageSize));
-      params.set('sortBy', sortBy);
-      params.set('sortDir', sortDir);
-      try {
-        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-users?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        });
-        const json = await resp.json();
-        if (json?.success && json?.data) {
-          const arr: User[] = (json.data.users || []).map((u: any) => ({
-            id: u.id,
-            name: u.full_name || 'Sin nombre',
-            full_name: u.full_name || 'Sin nombre',
-            email: u.email || 'Sin email',
-            role: (u.role === 'teacher' ? 'formador' : (u.role || 'student')) as 'student' | 'formador' | 'voluntario' | 'admin',
-            status: 'active',
-            enrolledPrograms: u.program_enrollments ?? 0,
-            joinedAt: u.created_at || new Date().toISOString(),
-            lastSignInAt: u.last_sign_in_at || null,
-            programs: u.programs || [],
-            courses: u.courses || [],
-          }));
-          setUsers(arr);
-          setTotal(json.data.total || arr.length);
-          setRoleCounts(json.data.counts || null);
-          return;
-        }
-      } catch (e) {
-        console.warn('list-users fallback:', e);
-      }
-
-      // Consulta SOLO a la tabla profiles (sin auth.users por permisos)
+      // Consulta directa a la tabla profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, email, role, created_at, updated_at')
@@ -181,21 +144,21 @@ export default function Usuarios() {
 
       if (profilesError) throw profilesError;
 
-      // Usar solo datos de profiles (sin consultar auth.users)
+      // Usar solo datos de profiles
       const profilesWithAuth = (profilesData || []).map((profile: any) => ({
         ...profile,
         email: profile.email || 'Sin email',
         auth_full_name: profile.full_name || 'Sin nombre',
-        last_sign_in_at: null // No disponible sin auth.users
+        last_sign_in_at: null
       }));
 
       const roleFilter = (u: any) => {
         if (filterRole === 'todos') return true;
-        // Mapeo completo de roles DB -> UI
         let mapped = u.role;
         if (u.role === 'teacher') mapped = 'formador';
         return mapped === filterRole;
       };
+      
       const searchFilter = (u: any) => {
         if (!debouncedSearchTerm) return true;
         const searchLower = debouncedSearchTerm.toLowerCase();
@@ -208,6 +171,7 @@ export default function Usuarios() {
       const filtered = profilesWithAuth.filter((u: any) => roleFilter(u) && searchFilter(u));
       console.log('Usuarios filtrados:', filtered.length, 'de', profilesWithAuth.length);
       setTotal(filtered.length);
+      
       const paginated = filtered.slice((page-1)*pageSize, page*pageSize);
       const arr: User[] = paginated.map((u: any) => ({
         id: u.id,
@@ -355,7 +319,6 @@ export default function Usuarios() {
             const courseEnrollments = programCourses.map(pc => ({
               user_id: userId,
               course_id: pc.course_id,
-              status: 'active' as const,
               progress_percent: 0
             }));
 
@@ -375,7 +338,7 @@ export default function Usuarios() {
         const courseEnrollments = selectedCourses.map(courseId => ({
           user_id: userId,
           course_id: courseId,
-          status: 'active' as const
+          progress_percent: 0
         }));
 
         const { error: courseError } = await supabase
@@ -633,7 +596,9 @@ export default function Usuarios() {
           ) : (
             <div className="space-y-4">
               {users.map((user) => (
-                <div key={user.id} className="flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50">
+                <div key={user.id} className={`flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50 ${
+                  selectedUser === user.id ? 'border-accent bg-accent/10' : ''
+                }`}>
                   <Avatar className="h-10 w-10">
                     <AvatarFallback>
                       {(user.full_name || 'U').charAt(0).toUpperCase()}
@@ -759,7 +724,9 @@ export default function Usuarios() {
                           .map((user) => (
                             <div
                               key={user.id}
-                              className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50"
+                              className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50 ${
+                                selectedUser === user.id ? 'border-accent bg-accent/10' : ''
+                              }`}
                               onClick={() => handleUserSelect(user.id)}
                             >
                               <Avatar className="h-8 w-8">
