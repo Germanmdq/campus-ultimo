@@ -251,39 +251,30 @@ export default function Usuarios() {
 
       // Crear nuevo usuario si es necesario
       if (createNewUser) {
-        // Obtener token de sesión actual
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          throw new Error('No hay sesión activa');
-        }
-
-        // Llamar a la Edge Function
-        const { data, error } = await supabase.functions.invoke('create-user', {
-          body: {
-            email: newEmail,
-            full_name: newName,
-            password: newPassword || undefined,
-            role: newRole
+        // Crear usuario directamente con auth.signUp
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: newEmail,
+          password: newPassword || crypto.randomUUID(), // Password random si no se provee
+          options: {
+            data: {
+              full_name: newName,
+            }
           }
         });
 
-        if (error) {
-          console.error('Error en Edge Function:', error);
-          throw new Error(error.message || 'Error llamando a la función de creación de usuario');
-        }
-        
-        if (data?.error) {
-          console.error('Error en respuesta:', data.error);
-          throw new Error(data.error);
-        }
+        if (authError) throw authError;
+        if (!authData.user) throw new Error('No se pudo crear el usuario');
 
-        if (!data?.success || !data?.user?.id) {
-          console.error('Datos de usuario no válidos:', data);
-          throw new Error('No se pudo obtener el ID del usuario creado');
-        }
+        userId = authData.user.id;
 
-        userId = data.user.id;
+        // Actualizar el rol en profiles
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ role: newRole === 'formador' ? 'teacher' : newRole })
+          .eq('id', userId);
+
+        if (profileError) throw profileError;
+
         console.log('Usuario creado exitosamente:', userId);
       }
 
@@ -355,7 +346,6 @@ export default function Usuarios() {
           : "Usuario inscrito exitosamente"
       });
 
-      // Limpiar formulario y recargar usuarios
       setSelectedUser('');
       setSelectedPrograms([]);
       setSelectedCourses([]);
@@ -366,7 +356,8 @@ export default function Usuarios() {
       setCreateNewUser(false);
       setSearchTerm('');
       setShowEnrollmentForm(false);
-      fetchUsers();
+
+      window.location.reload();
 
     } catch (error: any) {
       toast({
