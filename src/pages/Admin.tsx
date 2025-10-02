@@ -109,8 +109,8 @@ export default function Admin() {
 
   const openActivityDialog = (type: string, title: string) => {
     setActivityDialogType(type);
-    setActivityDialogTitle(title);
-    
+      setActivityDialogTitle(title);
+
     // Mapear el tipo a los datos correctos
     let detailData: any[] = [];
     
@@ -132,14 +132,40 @@ export default function Admin() {
         
       case 'usersInPrograms':
       case 'usersInIndividual':
-      case 'totalStudents':
-      case 'totalTeachers':
-      case 'totalVolunteers':
-        // Cargar usuarios según el tipo
-        let roleFilter = type === 'totalStudents' ? 'student' : type === 'totalTeachers' ? 'teacher' : 'student';
+      case 'usersInIndividualCourses':
+        // Cargar usuarios sin filtro de rol
         supabase.from('profiles')
           .select('id, full_name, email, created_at')
-          .eq('role', roleFilter)
+          .then(({ data }) => {
+            setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'totalStudents':
+        supabase.from('profiles')
+          .select('id, full_name, email, created_at')
+          .eq('role', 'student')
+          .then(({ data }) => {
+            setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'totalTeachers':
+        supabase.from('profiles')
+          .select('id, full_name, email, created_at')
+          .eq('role', 'teacher')
+          .then(({ data }) => {
+            setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'totalVolunteers':
+        supabase.from('profiles')
+          .select('id, full_name, email, created_at')
+          .eq('role', 'voluntario' as any)
           .then(({ data }) => {
             setActivityDetailData(data || []);
             setActivityDialogOpen(true);
@@ -217,8 +243,8 @@ export default function Admin() {
       let usersInIndividual = 0;
       if (courseCount && courseCount > 0) {
         try {
-          const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
-          usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
+      const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
+        usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
         } catch (error) {
           console.warn('Error fetching individual course enrollments (RLS issue):', error);
         }
@@ -237,7 +263,7 @@ export default function Admin() {
       // Totales por rol
       const { count: totalStudents } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
       const { count: totalTeachers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
-      const { count: totalVolunteers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
+      const { count: totalVolunteers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'voluntario' as any);
 
       // Top courses by watched_minutes (lesson_progress joined to lessons->courses)
       // limitar por rango si está definido
@@ -498,7 +524,7 @@ export default function Admin() {
                   <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.courses}</div>
                 </CardContent>
               </Card>
-              <Card role="button" onClick={() => openActivityDialog('usersInIndividual', 'Usuarios en programas')} className="hover:shadow-md transition-shadow">
+              <Card role="button" onClick={() => openActivityDialog('usersInIndividualCourses', 'Usuarios en cursos individuales')} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
                   <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en programas</CardTitle>
                 </CardHeader>
@@ -685,8 +711,8 @@ export default function Admin() {
                'Lista de usuarios'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-3 max-h-[60vh] overflow-auto">
+            <div className="space-y-3">
+              <div className="space-y-3 max-h-[60vh] overflow-auto">
               {activityDetailData.map((item, index) => (
                 <div key={item.id || index} className="p-3 border rounded-md">
                   <div className="flex items-center justify-between">
@@ -705,8 +731,8 @@ export default function Admin() {
                           setShowUserProfile(true); 
                         }}
                       >
-                        Ver perfil
-                      </Button>
+                      Ver perfil
+                    </Button>
                     )}
                   </div>
                 </div>
@@ -714,8 +740,8 @@ export default function Admin() {
               {activityDetailData.length === 0 && (
                 <p className="text-sm text-muted-foreground">Sin datos</p>
               )}
+              </div>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
