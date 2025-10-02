@@ -84,10 +84,10 @@ export function UserProfileDialog({ open, onOpenChange, userId }: UserProfileDia
       let loadedProfile: any = null;
       try {
         const { data: profileData } = await supabase
-          .rpc('get_users_with_emails')
-          .eq('id', userId)
-          .single();
-        loadedProfile = profileData || null;
+          .rpc('get_users_with_emails');
+        
+        // Filter by userId since RPC doesn't accept parameters
+        loadedProfile = profileData?.find((user: any) => user.id === userId) || null;
       } catch {}
 
       if (!loadedProfile) {
@@ -436,6 +436,13 @@ export function UserProfileDialog({ open, onOpenChange, userId }: UserProfileDia
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Perfil de Usuario
+            </DialogTitle>
+            <DialogDescription>Cargando información del usuario...</DialogDescription>
+          </DialogHeader>
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>

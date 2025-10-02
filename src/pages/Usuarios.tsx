@@ -251,15 +251,15 @@ export default function Usuarios() {
 
       // Crear nuevo usuario si es necesario
       if (createNewUser) {
-        // Crear usuario directamente con auth.signUp
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // Usar la API de administrador para crear el usuario sin afectar la sesión actual
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: newEmail,
-          password: newPassword || crypto.randomUUID(), // Password random si no se provee
-          options: {
-            data: {
-              full_name: newName,
-            }
-          }
+          password: newPassword || crypto.randomUUID(),
+          user_metadata: {
+            full_name: newName,
+            role: newRole
+          },
+          email_confirm: true
         });
 
         if (authError) throw authError;
@@ -270,7 +270,7 @@ export default function Usuarios() {
         // Actualizar el rol en profiles
         const { error: profileError } = await supabase
           .from('profiles')
-          .update({ role: newRole === 'formador' ? 'teacher' : newRole })
+          .update({ role: newRole })
           .eq('id', userId);
 
         if (profileError) throw profileError;
@@ -310,6 +310,7 @@ export default function Usuarios() {
             const courseEnrollments = programCourses.map(pc => ({
               user_id: userId,
               course_id: pc.course_id,
+              status: 'active' as const,
               progress_percent: 0
             }));
 
@@ -329,6 +330,7 @@ export default function Usuarios() {
         const courseEnrollments = selectedCourses.map(courseId => ({
           user_id: userId,
           course_id: courseId,
+          status: 'active' as const,
           progress_percent: 0
         }));
 
@@ -357,7 +359,8 @@ export default function Usuarios() {
       setSearchTerm('');
       setShowEnrollmentForm(false);
 
-      window.location.reload();
+      // Refresh users list instead of reloading the entire page
+      fetchUsers();
 
     } catch (error: any) {
       toast({

@@ -147,7 +147,8 @@ export default function Profesor() {
         const { count: enrolledCount } = await supabase
           .from('enrollments')
           .select('*', { count: 'exact', head: true })
-          .eq('program_id', program.id);
+          .eq('program_id', program.id)
+          .eq('status', 'active');
         
         return {
           program_id: program.id,
@@ -174,10 +175,12 @@ export default function Profesor() {
       if (coursesError) throw coursesError;
       
       const courseStatsPromises = coursesData?.map(async (course) => {
+        // Para cursos individuales, contar inscripciones directas en course_enrollments
         const { count: enrolledCount } = await supabase
-          .from('enrollments')
+          .from('course_enrollments')
           .select('*', { count: 'exact', head: true })
-          .eq('program_id', course.program_id);
+          .eq('course_id', course.id)
+          .eq('status', 'active');
         
         return {
           course_id: course.id,
