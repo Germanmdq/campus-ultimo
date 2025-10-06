@@ -52,11 +52,16 @@ export function AddCoursesToProgramDialog({
 
       const existingCourseIds = existingCourses?.map(pc => pc.course_id) || [];
 
-      const { data: allCourses, error } = await supabase
+      let query = supabase
         .from('courses')
         .select('id, title, summary, published_at')
-        .not('id', 'in', `(${existingCourseIds.join(',') || 'NULL'})`)
         .order('title');
+
+      if (existingCourseIds.length > 0) {
+        query = query.not('id', 'in', `(${existingCourseIds.join(',')})`);
+      }
+
+      const { data: allCourses, error } = await query;
 
       if (error) throw error;
       setCourses(allCourses || []);

@@ -54,11 +54,16 @@ export function EnrollUsersDialog({
 
       const enrolledUserIds = existingEnrollments?.map(e => e.user_id) || [];
 
-      const { data: allUsers, error } = await supabase
+      let query = supabase
         .from('profiles')
         .select('id, full_name, role')
-        .not('id', 'in', `(${enrolledUserIds.join(',') || 'NULL'})`)
         .order('full_name');
+
+      if (enrolledUserIds.length > 0) {
+        query = query.not('id', 'in', `(${enrolledUserIds.join(',')})`);
+      }
+
+      const { data: allUsers, error } = await query;
 
       if (error) throw error;
       setUsers(allUsers || []);
