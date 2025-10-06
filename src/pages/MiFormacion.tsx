@@ -40,14 +40,38 @@ export default function MiFormacion() {
             slug,
             poster_2x3_url,
             wide_11x6_url,
-            published_at
+            published_at,
+            program_courses (
+              course_id,
+              courses (
+                id,
+                title,
+                summary,
+                slug,
+                poster_2x3_url,
+                wide_11x6_url,
+                published_at
+              )
+            )
           )
         `)
-        .eq('user_id', profile.id)
-        .eq('status', 'active');
+        .eq('user_id', profile.id);
 
       const enrolledPrograms = (enrollmentsData || [])
-        .map(row => row.programs)
+        .map(row => {
+          const program = row.programs;
+          if (!program) return null;
+          
+          // Extraer cursos del programa
+          const courses = (program.program_courses || [])
+            .map(pc => pc.courses)
+            .filter(Boolean);
+          
+          return {
+            ...program,
+            courses: courses
+          };
+        })
         .filter(Boolean);
       
       setMyPrograms(enrolledPrograms);
@@ -68,39 +92,31 @@ export default function MiFormacion() {
         .map(row => row.courses)
         .filter(Boolean);
 
-      // Al inicio, después de obtener programas
-      const coursesInPrograms = coursesFromPrograms.map(c => c.id);
 
       // Cursos individuales inscritos
       const { data: ce, error: ceError } = await supabase
         .from('course_enrollments')
-        .select(`
-          id,
-          user_id,
-          course_id,
-          status,
-          courses (
-            id,
-            title,
-            summary,
-            slug,
-            poster_2x3_url,
-            wide_11x6_url,
-            published_at
-          )
-        `)
-        .eq('user_id', profile.id)
-        .eq('status', 'active');
+        .select('course_id')
+        .eq('user_id', profile.id);
 
       if (ceError) {
         console.error('Error obteniendo course_enrollments:', ceError);
       }
 
-      const enrolledCourses = (ce || [])
-        .map(row => row.courses)
-        .filter(Boolean);
+      // Obtener los cursos individuales
+      let enrolledCourses: any[] = [];
+      if (ce && ce.length > 0) {
+        const courseIds = ce.map(row => row.course_id);
+        const { data: coursesData } = await supabase
+          .from('courses')
+          .select('id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at')
+          .in('id', courseIds);
+        
+        enrolledCourses = coursesData || [];
+      }
 
       // Al mostrar cursos individuales, filtra:
+      const coursesInPrograms = coursesFromPrograms.map(c => c.id);
       const individualCourses = enrolledCourses.filter(course => 
         !coursesInPrograms.includes(course.id)
       );
@@ -149,6 +165,12 @@ export default function MiFormacion() {
           const coursesInPrograms = myPrograms.flatMap(p => 
             (p.courses || []).map(c => c.id)
           );
+          
+          console.log('myPrograms:', myPrograms);
+          console.log('myPrograms[0]:', myPrograms[0]);
+          console.log('myPrograms[0].courses:', myPrograms[0]?.courses);
+          console.log('coursesInPrograms:', coursesInPrograms);
+          console.log('myCourses ANTES de filtrar:', myCourses);
           
           const individualCourses = myCourses.filter(c => 
             !coursesInPrograms.includes(c.id)

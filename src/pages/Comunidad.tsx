@@ -1372,14 +1372,14 @@ export default function Comunidad() {
                 </div>
                 
                 <div className="flex-1 space-y-2">
-                  <textarea
+                  <Textarea
                     value={nestedReplyContent[reply.id] || ''}
                     onChange={(e) => setNestedReplyContent(prev => ({
                       ...prev,
                       [reply.id]: e.target.value
                     }))}
                     placeholder="Responder a este comentario..."
-                    className="w-full min-h-[60px] p-2 border rounded-lg resize-none text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full min-h-[60px]"
                     rows={2}
                   />
                   
@@ -1499,7 +1499,7 @@ export default function Comunidad() {
                     onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
                     placeholder="Descripción del foro"
                     rows={3}
-                    className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
+                    className="min-h-[80px]"
                   />
                 </div>
 
@@ -1607,7 +1607,7 @@ export default function Comunidad() {
                     onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
                     placeholder="Comparte tus ideas, preguntas o comentarios..."
                     rows={5}
-                    className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
+                    className="min-h-[80px]"
                   />
                 </div>
 
@@ -1994,7 +1994,7 @@ export default function Comunidad() {
                             ...prev,
                             [post.id]: e.target.value
                           }))}
-                          className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
+                          className="min-h-[80px]"
                         />
                         
                         {/* Componente de subida de archivos para respuestas */}
