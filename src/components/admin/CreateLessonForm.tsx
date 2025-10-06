@@ -36,6 +36,8 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   const [description, setDescription] = useState('');
   const [slug, setSlug] = useState('');
   const [courseId, setCourseId] = useState('');
+  const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
+  const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState('');
   const [duration, setDuration] = useState('');
   const [hasAssignment, setHasAssignment] = useState(false);
@@ -54,16 +56,18 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   useEffect(() => {
     if (inline) {
       fetchCourses();
+      fetchAvailableCourses();
     } else if (open) {
       fetchCourses();
+      fetchAvailableCourses();
     }
   }, [open, inline]);
 
   useEffect(() => {
-    if (courseId) {
+    if (selectedCourses.length > 0) {
       fetchPrerequisites();
     }
-  }, [courseId]);
+  }, [selectedCourses]);
 
   const fetchCourses = async () => {
     try {
@@ -83,16 +87,29 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
     }
   };
 
+  const fetchAvailableCourses = async () => {
+    const { data } = await supabase
+      .from('courses')
+      .select('id, title')
+      .order('title');
+    setAvailableCourses(data || []);
+  };
+
   const fetchPrerequisites = async () => {
-    if (!courseId) {
+    if (selectedCourses.length === 0) {
       setPrerequisites([]);
       return;
     }
     try {
       const { data, error } = await supabase
         .from('lessons')
-        .select('id, title, sort_order')
-        .eq('course_id', courseId)
+        .select(`
+          id, 
+          title, 
+          sort_order,
+          lesson_courses!inner (course_id)
+        `)
+        .in('lesson_courses.course_id', selectedCourses)
         .order('sort_order');
       if (error) throw error;
       setPrerequisites(data || []);
@@ -132,10 +149,10 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!title.trim() || !courseId) {
+    if (!title.trim() || selectedCourses.length === 0) {
       toast({
         title: "Error",
-        description: "Título y curso son obligatorios",
+        description: "Título y al menos un curso son obligatorios",
         variant: "destructive",
       });
       return;
@@ -144,8 +161,9 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
     setLoading(true);
     try {
       const base = generateSlug(title.trim());
-      const uniqueSlug = await ensureUniqueLessonSlug(base, courseId);
-      // 1. Crear la lección CON course_id (requerido por la tabla)
+      const uniqueSlug = await ensureUniqueLessonSlug(base, selectedCourses[0]);
+      
+      // 1. Crear la lección (sin course_id ya que usaremos lesson_courses)
       const { data, error } = await supabase
         .from('lessons')
         .insert([{
@@ -160,21 +178,23 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
           approval_form_url: requiresApproval ? (approvalFormUrl.trim() || null) : null,
           prerequisite_lesson_id: (prerequisiteId && prerequisiteId !== 'none') ? prerequisiteId : null,
           has_materials: hasMaterials,
-          sort_order: prerequisites.length + 1,
-          course_id: courseId // ✅ AGREGAR course_id requerido
+          sort_order: prerequisites.length + 1
         }])
         .select('id')
         .single();
 
       if (error) throw error;
 
-      // 2. Crear la relación en lesson_courses (many-to-many)
+      // 2. Crear las relaciones en lesson_courses (many-to-many)
+      const assignments = selectedCourses.map((courseId, index) => ({
+        lesson_id: data.id,
+        course_id: courseId,
+        sort_order: index
+      }));
+
       const { error: relationError } = await supabase
         .from('lesson_courses')
-        .insert([{
-          lesson_id: data.id,
-          course_id: courseId
-        }]);
+        .insert(assignments);
 
       if (relationError) throw relationError;
 
@@ -211,6 +231,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
     setDescription('');
     setSlug('');
     setCourseId('');
+    setSelectedCourses([]);
     setVideoUrl('');
     setDuration('');
     setHasAssignment(false);
@@ -235,25 +256,25 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
       <div className="w-full">
         <h3 className="text-lg font-semibold mb-2">Crear Nueva Lección</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="course">Curso</Label>
-            <Select value={courseId} onValueChange={setCourseId} disabled={loading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar curso" />
-              </SelectTrigger>
-              <SelectContent>
-                {courses.map(course => (
-                  <SelectItem key={course.id} value={course.id}>
-                    {course.title}
-                    {course.program?.title && (
-                      <span className="text-sm text-muted-foreground ml-2">
-                        ({course.program.title})
-                      </span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-2">
+            <Label>Asignar a cursos</Label>
+            <div className="space-y-2 border rounded-md p-3 max-h-60 overflow-y-auto">
+              {availableCourses.map(course => (
+                <div key={course.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    checked={selectedCourses.includes(course.id)}
+                    onCheckedChange={(checked) => {
+                      setSelectedCourses(prev =>
+                        checked
+                          ? [...prev, course.id]
+                          : prev.filter(id => id !== course.id)
+                      );
+                    }}
+                  />
+                  <label>{course.title}</label>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div>
@@ -429,25 +450,25 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
           <DialogDescription>Completa los campos y previsualiza la descripción en Markdown.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="course">Curso</Label>
-            <Select value={courseId} onValueChange={setCourseId} disabled={loading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar curso" />
-              </SelectTrigger>
-              <SelectContent>
-                {courses.map(course => (
-                  <SelectItem key={course.id} value={course.id}>
-                    {course.title}
-                    {course.program && (
-                      <span className="text-sm text-muted-foreground ml-2">
-                        ({course.program.title})
-                      </span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-2">
+            <Label>Asignar a cursos</Label>
+            <div className="space-y-2 border rounded-md p-3 max-h-60 overflow-y-auto">
+              {availableCourses.map(course => (
+                <div key={course.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    checked={selectedCourses.includes(course.id)}
+                    onCheckedChange={(checked) => {
+                      setSelectedCourses(prev =>
+                        checked
+                          ? [...prev, course.id]
+                          : prev.filter(id => id !== course.id)
+                      );
+                    }}
+                  />
+                  <label>{course.title}</label>
+                </div>
+              ))}
+            </div>
           </div>
           
           <div>
@@ -604,6 +625,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
             onOpenChange={handleMaterialsDialogClose}
             lessonId={createdLessonId}
             lessonTitle={title}
+            onClose={handleMaterialsDialogClose}
           />
         )}
       </DialogContent>
