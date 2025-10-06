@@ -131,13 +131,43 @@ export default function Admin() {
         return;
         
       case 'usersInPrograms':
+        supabase
+          .from('enrollments')
+          .select('user_id')
+          .eq('status', 'active')
+          .then(async ({ data }) => {
+            const uniqueUserIds = Array.from(new Set((data || []).map(e => e.user_id)));
+            const { data: usersData } = await supabase
+              .from('profiles')
+              .select('id, full_name, email, created_at')
+              .in('id', uniqueUserIds);
+            setActivityDetailData(usersData || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
       case 'usersInIndividual':
-      case 'usersInIndividualCourses':
         // Cargar usuarios sin filtro de rol
         supabase.from('profiles')
           .select('id, full_name, email, created_at')
           .then(({ data }) => {
             setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'usersInIndividualCourses':
+        supabase
+          .from('course_enrollments')
+          .select('user_id')
+          .eq('status', 'active')
+          .then(async ({ data }) => {
+            const uniqueUserIds = Array.from(new Set((data || []).map(e => e.user_id)));
+            const { data: usersData } = await supabase
+              .from('profiles')
+              .select('id, full_name, email, created_at')
+              .in('id', uniqueUserIds);
+            setActivityDetailData(usersData || []);
             setActivityDialogOpen(true);
           });
         return;
@@ -526,7 +556,7 @@ export default function Admin() {
               </Card>
               <Card role="button" onClick={() => openActivityDialog('usersInIndividualCourses', 'Usuarios en cursos individuales')} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en programas</CardTitle>
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en cursos individuales</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.usersInIndividual}</div>

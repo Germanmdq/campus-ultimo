@@ -73,11 +73,6 @@ const getNavigationItems = (role: string) => {
     { title: "Comunidad", url: "/comunidad", icon: MessageSquare }
   );
 
-  // Mostrar Slack solo para roles no-estudiante
-  if (role !== 'student') {
-    baseItems.push({ title: "Slack", url: "/slack", icon: MessageSquare });
-  }
-
   return baseItems;
 };
 

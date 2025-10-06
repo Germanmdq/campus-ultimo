@@ -396,7 +396,6 @@ export default function Comunidad() {
     const { data } = await supabase
       .from('programs')
       .select('id, title')
-      .not('published_at', 'is', null)
       .order('title');
     
     setPrograms(data || []);
@@ -418,6 +417,10 @@ export default function Comunidad() {
   // Subida de archivos de POST (no replies)
   const uploadPostFiles = async (postId: string) => {
     if (selectedFiles.length === 0) return [];
+
+    console.log('🔥 INICIANDO SUBIDA DE ARCHIVOS');
+    console.log('🔥 Archivos a subir:', selectedFiles.length);
+    console.log('🔥 PostId:', postId);
 
     setUploadingFiles(true);
     const uploadedFiles = [];
@@ -564,6 +567,12 @@ export default function Comunidad() {
   };
 
   const handleCreatePost = async () => {
+    console.log('🔥🔥🔥 CREAR POST - INICIO');
+    console.log('🔥 newPost:', newPost);
+    console.log('🔥 selectedFiles:', selectedFiles);
+    console.log('🔥 selectedFiles.length:', selectedFiles.length);
+    console.log('🔥 user:', user);
+
     if (!newPost.title.trim() || !newPost.content.trim()) {
       toast({
         title: "Error",
@@ -603,6 +612,8 @@ export default function Comunidad() {
       }
 
       // Subir archivos si hay alguno
+      console.log('🔥 POST CREADO, ID:', data[0].id);
+      console.log('🔥 INICIANDO UPLOAD DE ARCHIVOS');
       if (selectedFiles.length > 0) {
         await uploadPostFiles(data[0].id);
       }
@@ -1981,7 +1992,7 @@ export default function Comunidad() {
                             ...prev,
                             [post.id]: e.target.value
                           }))}
-                        className="min-h-[80px]"
+                        className="min-h-[80px] text-foreground placeholder:text-muted-foreground"
                         />
                         
                         {/* Componente de subida de archivos para respuestas */}
