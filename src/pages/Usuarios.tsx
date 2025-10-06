@@ -251,15 +251,15 @@ export default function Usuarios() {
 
       // Crear nuevo usuario si es necesario
       if (createNewUser) {
-        // Usar la API de administrador para crear el usuario sin afectar la sesión actual
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        // Crear usuario directamente con auth.signUp
+        const { data: authData, error: authError } = await supabase.auth.signUp({
           email: newEmail,
           password: newPassword || crypto.randomUUID(),
-          user_metadata: {
-            full_name: newName,
-            role: newRole
-          },
-          email_confirm: true
+          options: {
+            data: {
+              full_name: newName,
+            }
+          }
         });
 
         if (authError) throw authError;
@@ -270,7 +270,7 @@ export default function Usuarios() {
         // Actualizar el rol en profiles
         const { error: profileError } = await supabase
           .from('profiles')
-          .update({ role: newRole })
+          .update({ role: newRole === 'formador' ? 'teacher' : newRole })
           .eq('id', userId);
 
         if (profileError) throw profileError;

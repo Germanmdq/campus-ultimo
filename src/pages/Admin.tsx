@@ -66,6 +66,11 @@ export default function Admin() {
   const [activityDialogTitle, setActivityDialogTitle] = useState('Usuarios');
   const [activeUsersRoleFilter, setActiveUsersRoleFilter] = useState<'todos' | 'student' | 'teacher' | 'admin' | 'voluntario'>('todos');
 
+  // Estados para el diálogo de actividad
+  const [activityDialogOpen, setActivityDialogOpen] = useState(false);
+  const [activityDialogType, setActivityDialogType] = useState('');
+  const [activityDetailData, setActivityDetailData] = useState<any[]>([]);
+
   const exportActiveUsersCsv = () => {
     const headers = ['nombre','email','programas','cursos'];
     const search = activeUsersSearch.trim().toLowerCase();
@@ -102,113 +107,114 @@ export default function Admin() {
     return <Navigate to="/mi-formacion" replace />;
   }
 
-  const openActivityDialog = async (kind: string, title: string) => {
-    try {
-      setActiveUsersLoading(true);
-      setShowActiveUsers(true);
+  const openActivityDialog = (type: string, title: string) => {
+    setActivityDialogType(type);
       setActivityDialogTitle(title);
 
-      let ids: string[] = [];
-
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
-
-      if (kind === 'active30') {
-        const { data } = await supabase.from('lesson_progress').select('user_id').gte('updated_at', monthAgo).limit(10000);
-        ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
-      } else if (kind === 'active7') {
-        const { data } = await supabase.from('lesson_progress').select('user_id').gte('updated_at', weekAgo).limit(10000);
-        ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
-      } else if (kind === 'usersInPrograms' || kind === 'programs') {
-        try {
-          const { data } = await supabase.from('course_enrollments').select('user_id').limit(20000);
-          ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
-        } catch (error) {
-          console.warn('Error fetching course_enrollments for active users:', error);
-          ids = [];
-        }
-      } else if (kind === 'usersInIndividual' || kind === 'courses') {
-        const { data } = await supabase.from('assignments').select('user_id').limit(20000);
-        ids = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
-      } else if (kind === 'newWeek') {
-        const { data } = await supabase.from('profiles').select('id').gte('created_at', weekAgo).limit(20000);
-        ids = (data || []).map((r: any) => r.id);
-      } else if (kind === 'newMonth') {
-        const { data } = await supabase.from('profiles').select('id').gte('created_at', monthAgo).limit(20000);
-        ids = (data || []).map((r: any) => r.id);
-      } else if (kind === 'newYear') {
-        const { data } = await supabase.from('profiles').select('id').gte('created_at', yearAgo).limit(20000);
-        ids = (data || []).map((r: any) => r.id);
-      } else if (kind === 'totalStudents') {
-        const { data } = await supabase.from('profiles').select('id').eq('role', 'student').limit(20000);
-        ids = (data || []).map((r: any) => r.id);
-      } else if (kind === 'totalTeachers') {
-        const { data } = await supabase.from('profiles').select('id').eq('role', 'teacher').limit(20000);
-        ids = (data || []).map((r: any) => r.id);
-      } else if (kind === 'totalVolunteers') {
-        const { data } = await supabase.from('profiles').select('id').eq('role', 'student').limit(20000);
-        ids = (data || []).map((r: any) => r.id);
-      } else if (kind === 'activeStudentsMonth') {
-        const { data: lp } = await supabase.from('lesson_progress').select('user_id').gte('updated_at', monthAgo).limit(20000);
-        const setIds = new Set((lp || []).map((r: any) => r.user_id).filter(Boolean));
-        const { data: studs } = await supabase.from('profiles').select('id').eq('role', 'student').in('id', Array.from(setIds));
-        ids = (studs || []).map((r: any) => r.id);
-      }
-
-      if (ids.length === 0) { setActiveUsersDetails([]); return; }
-
-      // Obtener emails y roles vía Edge Function list-users (más robusto que la RPC)
-      let byId: Record<string, any> = {};
-      try {
-        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/list-users?all=true&pageSize=2000&sortBy=created_at&sortDir=desc`, {
-          headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+    // Mapear el tipo a los datos correctos
+    let detailData: any[] = [];
+    
+    switch(type) {
+      case 'programs':
+        // Necesitas cargar la lista de programas
+        supabase.from('programs').select('id, title, created_at').then(({ data }) => {
+          setActivityDetailData(data || []);
+          setActivityDialogOpen(true);
         });
-        const json = await resp.json();
-        const arr = (json?.data?.users || []) as any[];
-        arr.forEach((u: any) => { byId[u.id] = u; });
-      } catch (_) {
-        byId = {};
-      }
-
-      // Programas y cursos asociados
-      let enr = null, cenr = null;
-      try {
-        const [enrResult, cenrResult] = await Promise.all([
-          supabase.from('course_enrollments').select('user_id, courses(title)').in('user_id', ids),
-          supabase.from('assignments').select('user_id, courses(title)').in('user_id', ids),
-        ]);
-        enr = enrResult.data;
-        cenr = cenrResult.data;
-      } catch (error) {
-        console.warn('Error fetching course enrollments and assignments:', error);
-        enr = [];
-        cenr = [];
-      }
-      const programsByUser: Record<string, string[]> = {};
-      (enr || []).forEach((row: any) => {
-        const uid = row.user_id; const title = row.programs?.title;
-        if (!uid || !title) return; if (!programsByUser[uid]) programsByUser[uid] = []; programsByUser[uid].push(title);
-      });
-      const coursesByUser: Record<string, string[]> = {};
-      (cenr || []).forEach((row: any) => {
-        const uid = row.user_id; const title = row.courses?.title;
-        if (!uid || !title) return; if (!coursesByUser[uid]) coursesByUser[uid] = []; coursesByUser[uid].push(title);
-      });
-
-      const details = ids.map((id) => ({
-        id,
-        name: byId[id]?.full_name || byId[id]?.email || '—',
-        full_name: byId[id]?.full_name || byId[id]?.email || '—',
-        email: byId[id]?.email || '—',
-        role: byId[id]?.role || 'student',
-        programs: (programsByUser[id] || []).slice(0, 5),
-        courses: (coursesByUser[id] || []).slice(0, 5),
-      }));
-      setActiveUsersDetails(details);
-    } finally {
-      setActiveUsersLoading(false);
+        return;
+        
+      case 'courses':
+        supabase.from('courses').select('id, title, created_at').then(({ data }) => {
+          setActivityDetailData(data || []);
+          setActivityDialogOpen(true);
+        });
+        return;
+        
+      case 'usersInPrograms':
+        supabase
+          .from('enrollments')
+          .select('user_id')
+          .eq('status', 'active')
+          .then(async ({ data }) => {
+            const uniqueUserIds = Array.from(new Set((data || []).map(e => e.user_id)));
+            const { data: usersData } = await supabase
+              .from('profiles')
+              .select('id, full_name, email, created_at')
+              .in('id', uniqueUserIds);
+            setActivityDetailData(usersData || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'usersInIndividual':
+        // Cargar usuarios sin filtro de rol
+        supabase.from('profiles')
+          .select('id, full_name, email, created_at')
+          .then(({ data }) => {
+            setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'usersInIndividualCourses':
+        supabase
+          .from('course_enrollments')
+          .select('user_id')
+          .eq('status', 'active')
+          .then(async ({ data }) => {
+            const uniqueUserIds = Array.from(new Set((data || []).map(e => e.user_id)));
+            const { data: usersData } = await supabase
+              .from('profiles')
+              .select('id, full_name, email, created_at')
+              .in('id', uniqueUserIds);
+            setActivityDetailData(usersData || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'totalStudents':
+        supabase.from('profiles')
+          .select('id, full_name, email, created_at')
+          .eq('role', 'student')
+          .then(({ data }) => {
+            setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'totalTeachers':
+        supabase.from('profiles')
+          .select('id, full_name, email, created_at')
+          .eq('role', 'teacher')
+          .then(({ data }) => {
+            setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'totalVolunteers':
+        supabase.from('profiles')
+          .select('id, full_name, email, created_at')
+          .eq('role', 'voluntario' as any)
+          .then(({ data }) => {
+            setActivityDetailData(data || []);
+            setActivityDialogOpen(true);
+          });
+        return;
+        
+      case 'newWeek':
+      case 'newMonth':
+      case 'newYear':
+      case 'active30':
+      case 'active7':
+        // Usar la lista que ya tienes en activity.activeUsersList
+        setActivityDetailData(activity.activeUsersList || []);
+        setActivityDialogOpen(true);
+        return;
+        
+      default:
+        setActivityDetailData([]);
+        setActivityDialogOpen(true);
     }
   };
 
@@ -254,20 +260,20 @@ export default function Admin() {
       const { count: progCount } = await supabase.from('programs').select('*', { count: 'exact', head: true });
       const { count: courseCount } = await supabase.from('courses').select('*', { count: 'exact', head: true });
 
-      // Distinct users in programs (active) - with RLS error handling
+      // Distinct users in programs - with RLS error handling
       let usersInPrograms = 0;
       try {
-        const { data: enrs } = await supabase.from('enrollments').select('user_id').eq('status', 'active');
+        const { data: enrs } = await supabase.from('enrollments').select('user_id');
         usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
       } catch (error) {
         console.warn('Error fetching enrollments (RLS issue):', error);
       }
 
-      // Distinct users in individual courses (active) - Only count if courses exist
+      // Distinct users in individual courses - Only count if courses exist
       let usersInIndividual = 0;
       if (courseCount && courseCount > 0) {
         try {
-          const { data: cenrs } = await supabase.from('course_enrollments').select('user_id').eq('status', 'active');
+          const { data: cenrs } = await supabase.from('course_enrollments').select('user_id');
           usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
         } catch (error) {
           console.warn('Error fetching individual course enrollments (RLS issue):', error);
@@ -287,7 +293,7 @@ export default function Admin() {
       // Totales por rol
       const { count: totalStudents } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
       const { count: totalTeachers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
-      const { count: totalVolunteers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
+      const { count: totalVolunteers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'voluntario' as any);
 
       // Top courses by watched_minutes (lesson_progress joined to lessons->courses)
       // limitar por rango si está definido
@@ -548,9 +554,9 @@ export default function Admin() {
                   <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.courses}</div>
                 </CardContent>
               </Card>
-              <Card role="button" onClick={() => openActivityDialog('usersInIndividual', 'Usuarios en programas')} className="hover:shadow-md transition-shadow">
+              <Card role="button" onClick={() => openActivityDialog('usersInIndividualCourses', 'Usuarios en cursos individuales')} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en programas</CardTitle>
+                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en cursos individuales</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.usersInIndividual}</div>
@@ -720,101 +726,52 @@ export default function Admin() {
           userId={selectedUserId}
         />
       )}
-      <Dialog open={showActiveUsers} onOpenChange={setShowActiveUsers}>
+      <Dialog open={activityDialogOpen} onOpenChange={setActivityDialogOpen}>
         <DialogContent className="sm:max-w-[700px]">
           <DialogHeader>
             <DialogTitle>
               {activityDialogTitle}
               <span className="text-xs text-muted-foreground ml-2">
-                {activeUsersDetails
-                  .filter(u => activeUsersRoleFilter === 'todos' || u.role === activeUsersRoleFilter)
-                  .filter(u => {
-                    const s = activeUsersSearch.trim().toLowerCase();
-                    if (!s) return true;
-                    return (
-                      (u.full_name || '').toLowerCase().includes(s) ||
-                      (u.email || '').toLowerCase().includes(s) ||
-                      u.programs.join(', ').toLowerCase().includes(s) ||
-                      u.courses.join(', ').toLowerCase().includes(s)
-                    );
-                  }).length} resultados
+                {activityDetailData.length} resultados
               </span>
             </DialogTitle>
-            <DialogDescription>Nombre, email y asociaciones recientes</DialogDescription>
+            <DialogDescription>
+              {activityDialogType === 'programs' ? 'Lista de programas' : 
+               activityDialogType === 'courses' ? 'Lista de cursos' : 
+               'Lista de usuarios'}
+            </DialogDescription>
           </DialogHeader>
-          {activeUsersLoading ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Buscar por nombre, email, programa o curso"
-                  value={activeUsersSearch}
-                  onChange={(e) => setActiveUsersSearch(e.target.value)}
-                  disabled
-                />
-                <Button variant="outline" disabled>Cargando...</Button>
-              </div>
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Buscar por nombre, email, programa o curso"
-                  value={activeUsersSearch}
-                  onChange={(e) => setActiveUsersSearch(e.target.value)}
-                />
-                <Select value={activeUsersRoleFilter} onValueChange={(v) => setActiveUsersRoleFilter(v as any)}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Rol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="student">Estudiante</SelectItem>
-                    <SelectItem value="teacher">Formador</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="voluntario">Voluntario</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={exportActiveUsersCsv}>Exportar CSV</Button>
-              </div>
               <div className="space-y-3 max-h-[60vh] overflow-auto">
-              {activeUsersDetails
-                .filter(u => activeUsersRoleFilter === 'todos' || u.role === activeUsersRoleFilter)
-                .filter(u => {
-                  const s = activeUsersSearch.trim().toLowerCase();
-                  if (!s) return true;
-                  return (
-                    (u.full_name || '').toLowerCase().includes(s) ||
-                    (u.email || '').toLowerCase().includes(s) ||
-                    u.programs.join(', ').toLowerCase().includes(s) ||
-                    u.courses.join(', ').toLowerCase().includes(s)
-                  );
-                })
-                .map(u => (
-                <div key={u.id} className="p-3 border rounded-md">
+              {activityDetailData.map((item, index) => (
+                <div key={item.id || index} className="p-3 border rounded-md">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium">{u.full_name}</div>
-                      <div className="text-sm text-muted-foreground">{u.email}</div>
+                      <div className="font-medium">{item.title || item.full_name || item.name || 'Sin nombre'}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {item.email || item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
+                      </div>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => { setSelectedUserId(u.id); setShowUserProfile(true); }}>
+                    {(item.id && (item.full_name || item.email)) && (
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => { 
+                          setSelectedUserId(item.id); 
+                          setShowUserProfile(true); 
+                        }}
+                      >
                       Ver perfil
                     </Button>
-                  </div>
-                  <div className="mt-2 text-sm">
-                    <div className="text-muted-foreground">Programas: {u.programs.join(', ') || '—'}</div>
-                    <div className="text-muted-foreground">Cursos: {u.courses.join(', ') || '—'}</div>
+                    )}
                   </div>
                 </div>
               ))}
-              {activeUsersDetails.length === 0 && (
+              {activityDetailData.length === 0 && (
                 <p className="text-sm text-muted-foreground">Sin datos</p>
               )}
               </div>
             </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>

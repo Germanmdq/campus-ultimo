@@ -49,7 +49,6 @@ export default function LessonDetail() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMaterials, setShowMaterials] = useState(false);
-  const [showDescription, setShowDescription] = useState(false);
   const [dropboxLink, setDropboxLink] = useState('');
   const [textAnswer, setTextAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -281,48 +280,42 @@ export default function LessonDetail() {
             </Card>
           )}
 
-          {/* Description as popup trigger */}
+          {/* Description card - SIEMPRE VISIBLE */}
           {lesson.description && (
-            <div>
-              <Button onClick={() => setShowDescription(true)} className="w-full">
-                Leer antes de ver la lección
-              </Button>
-              <Dialog open={showDescription} onOpenChange={setShowDescription}>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Descripción</DialogTitle>
-                    <DialogDescription>Lee atentamente antes de comenzar</DialogDescription>
-                  </DialogHeader>
-                  <div className="prose dark:prose-invert max-w-none">
-                    <ReactMarkdown>{lesson.description}</ReactMarkdown>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Descripción de la lección</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="prose dark:prose-invert max-w-none">
+                  <ReactMarkdown>{lesson.description}</ReactMarkdown>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
-          {/* Materials section - SIEMPRE VISIBLE */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Materiales
-                {isTeacherOrAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowMaterials(true)}
-                    className="ml-auto"
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Gestionar Materiales
-                  </Button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {materials.length > 0 ? (
-                materials.map(material => (
+          {/* Materials section - SOLO SI HAY MATERIALES */}
+          {materials.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Materiales
+                  {isTeacherOrAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowMaterials(true)}
+                      className="ml-auto"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Gestionar Materiales
+                    </Button>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {materials.map(material => (
                   <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
                       {material.type === 'file' ? <FileText className="h-4 w-4" /> : <Link className="h-4 w-4" />}
@@ -343,18 +336,10 @@ export default function LessonDetail() {
                       {material.type === 'file' ? 'Descargar' : 'Abrir'}
                     </Button>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-6 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>No hay materiales disponibles para esta lección</p>
-                  {isTeacherOrAdmin && (
-                    <p className="text-sm mt-2">Usa el botón "Gestionar Materiales" para agregar contenido</p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Lesson Info */}
@@ -379,7 +364,39 @@ export default function LessonDetail() {
                     <div className="space-y-2 p-3 border rounded-md">
                       <Button
                         className="w-full"
-                        onClick={() => window.open('https://www.dropbox.com/request/LlaRtF8KefIoXHjdg0Uo', '_blank')}
+                        onClick={async () => {
+                          try {
+                            // Crear notificación en assignments
+                            const { error } = await supabase
+                              .from('assignments')
+                              .insert({
+                                user_id: profile.id,
+                                lesson_id: lesson.id,
+                                status: 'submitted',
+                                file_url: null,
+                                text_answer: null,
+                                max_grade: 100
+                              });
+                            
+                            if (error) throw error;
+                            
+                            // Abrir Dropbox
+                            window.open('https://www.dropbox.com/request/LlaRtF8KefIoXHjdg0Uo', '_blank');
+                            
+                            // Mostrar toast de éxito
+                            toast({
+                              title: "Trabajo enviado",
+                              description: "Se notificó al profesor. Sube tu archivo en Dropbox."
+                            });
+                            
+                          } catch (error: any) {
+                            toast({
+                              title: "Error",
+                              description: error.message,
+                              variant: "destructive"
+                            });
+                          }
+                        }}
                       >
                         Enviar trabajo práctico (Dropbox)
                       </Button>
