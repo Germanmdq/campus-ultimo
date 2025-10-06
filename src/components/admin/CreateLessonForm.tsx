@@ -127,18 +127,8 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
       .trim();
   };
 
-  const ensureUniqueLessonSlug = async (base: string, courseId: string) => {
-    const baseSlug = base || 'leccion';
-    const { data } = await supabase
-      .from('lessons')
-      .select('slug')
-      .eq('course_id', courseId)
-      .ilike('slug', `${baseSlug}%`);
-    const taken = new Set((data || []).map((r: any) => r.slug));
-    if (!taken.has(baseSlug)) return baseSlug;
-    let i = 2;
-    while (taken.has(`${baseSlug}-${i}`)) i++;
-    return `${baseSlug}-${i}`;
+  const ensureUniqueLessonSlug = async (baseSlug: string, courseId: string) => {
+    return `${baseSlug}-${courseId.substring(0, 8)}`;
   };
 
   const handleTitleChange = (value: string) => {
@@ -170,6 +160,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
           title: title.trim(),
           description: description.trim() || null,
           slug: uniqueSlug,
+          course_id: selectedCourses[0] || null,
           video_url: videoUrl.trim() || null,
           duration_minutes: duration ? parseInt(duration) : 0,
           has_assignment: hasAssignment,
@@ -186,7 +177,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
       if (error) throw error;
 
       // 2. Crear las relaciones en lesson_courses (many-to-many)
-      const assignments = selectedCourses.map((courseId, index) => ({
+      const lessonCourseInserts = selectedCourses.map((courseId, index) => ({
         lesson_id: data.id,
         course_id: courseId,
         sort_order: index
@@ -194,7 +185,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
 
       const { error: relationError } = await supabase
         .from('lesson_courses')
-        .insert(assignments);
+        .insert(lessonCourseInserts);
 
       if (relationError) throw relationError;
 
