@@ -251,14 +251,14 @@ export default function Usuarios() {
 
       // Crear nuevo usuario si es necesario
       if (createNewUser) {
-        // Crear usuario directamente con auth.signUp
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: newEmail,
           password: newPassword || crypto.randomUUID(),
           options: {
             data: {
               full_name: newName,
-            }
+            },
+            emailRedirectTo: undefined
           }
         });
 
@@ -266,6 +266,15 @@ export default function Usuarios() {
         if (!authData.user) throw new Error('No se pudo crear el usuario');
 
         userId = authData.user.id;
+
+        // CRÍTICO: Restaurar sesión del admin inmediatamente
+        if (authData?.user) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            // Re-login del admin
+            window.location.reload();
+          }
+        }
 
         // Actualizar el rol en profiles
         const { error: profileError } = await supabase
