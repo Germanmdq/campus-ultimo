@@ -251,40 +251,47 @@ export default function Usuarios() {
 
       // Crear nuevo usuario si es necesario
       if (createNewUser) {
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: newEmail,
-          password: newPassword || crypto.randomUUID(),
-          options: {
-            data: {
-              full_name: newName,
-            },
-            emailRedirectTo: undefined
+        const { data, error } = await supabase.functions.invoke('create-user', {
+          body: {
+            email: newEmail,
+            password: newPassword || crypto.randomUUID(),
+            full_name: newName,
+            role: 'student'
           }
         });
 
-        if (authError) throw authError;
-        if (!authData.user) throw new Error('No se pudo crear el usuario');
-
-        userId = authData.user.id;
-
-        // CRÍTICO: Restaurar sesión del admin inmediatamente
-        if (authData?.user) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) {
-            // Re-login del admin
-            window.location.reload();
-          }
+        if (error) {
+          throw new Error(error.message || 'Error al crear usuario');
         }
 
-        // Actualizar el rol en profiles
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ role: newRole === 'formador' ? 'teacher' : newRole })
-          .eq('id', userId);
+        if (!data?.success) {
+          throw new Error(data?.error || 'Error desconocido al crear usuario');
+        }
 
-        if (profileError) throw profileError;
+        console.log('Respuesta completa de create-user:', data);
 
-        console.log('Usuario creado exitosamente:', userId);
+        const userId = data?.user?.id;
+
+        if (!userId) {
+          throw new Error('No se pudo obtener el ID del usuario creado');
+        }
+
+        console.log('Usuario creado con ID:', userId);
+
+        toast({
+          title: "Usuario creado",
+          description: `Usuario ${newEmail} creado exitosamente`
+        });
+
+        // Actualizar el rol en profiles si es diferente a student
+        if (newRole !== 'student') {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .update({ role: newRole === 'formador' ? 'teacher' : newRole })
+            .eq('id', userId);
+
+          if (profileError) throw profileError;
+        }
       }
 
       // Inscribir en programas
