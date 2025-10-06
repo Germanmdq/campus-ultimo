@@ -68,6 +68,9 @@ export default function MiFormacion() {
         .map(row => row.courses)
         .filter(Boolean);
 
+      // Al inicio, después de obtener programas
+      const coursesInPrograms = coursesFromPrograms.map(c => c.id);
+
       // Cursos individuales inscritos
       const { data: ce, error: ceError } = await supabase
         .from('course_enrollments')
@@ -93,11 +96,16 @@ export default function MiFormacion() {
         console.error('Error obteniendo course_enrollments:', ceError);
       }
 
-      const individualCourses = (ce || [])
+      const enrolledCourses = (ce || [])
         .map(row => row.courses)
         .filter(Boolean);
 
-      // Combinar TODOS los cursos: de programas + individuales
+      // Al mostrar cursos individuales, filtra:
+      const individualCourses = enrolledCourses.filter(course => 
+        !coursesInPrograms.includes(course.id)
+      );
+
+      // Combinar TODOS los cursos: de programas + individuales filtrados
       const allCourses = [...coursesFromPrograms, ...individualCourses];
 
       setMyCourses(allCourses);
@@ -137,7 +145,16 @@ export default function MiFormacion() {
           </Card>
         ))}
 
-        {myCourses.map((course) => (
+        {(() => {
+          const coursesInPrograms = myPrograms.flatMap(p => 
+            (p.courses || []).map(c => c.id)
+          );
+          
+          const individualCourses = myCourses.filter(c => 
+            !coursesInPrograms.includes(c.id)
+          );
+          
+          return individualCourses.map((course) => (
           <Card key={`course-${course.id}`} className="cursor-pointer hover:elev-3 hover:-translate-y-1 transition-all duration-300 glow-hover">
             <Link to={`/ver-curso/${course.slug}`}>
               <div className="aspect-[2/3] relative overflow-hidden rounded-t-lg">
@@ -159,7 +176,8 @@ export default function MiFormacion() {
               </CardContent>
             </Link>
           </Card>
-        ))}
+          ));
+        })()}
       </div>
     </div>
   );

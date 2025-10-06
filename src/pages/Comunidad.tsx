@@ -1499,6 +1499,7 @@ export default function Comunidad() {
                     onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
                     placeholder="Descripción del foro"
                     rows={3}
+                    className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
                   />
                 </div>
 
@@ -1606,6 +1607,7 @@ export default function Comunidad() {
                     onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
                     placeholder="Comparte tus ideas, preguntas o comentarios..."
                     rows={5}
+                    className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
                   />
                 </div>
 
@@ -1992,7 +1994,7 @@ export default function Comunidad() {
                             ...prev,
                             [post.id]: e.target.value
                           }))}
-                        className="min-h-[80px] text-foreground placeholder:text-muted-foreground"
+                          className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
                         />
                         
                         {/* Componente de subida de archivos para respuestas */}
@@ -2045,6 +2047,7 @@ export default function Comunidad() {
                 onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
                 placeholder="Descripción del foro"
                 rows={3}
+                className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
               />
             </div>
 
