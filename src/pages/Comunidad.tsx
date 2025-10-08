@@ -102,11 +102,12 @@ export default function Comunidad() {
   const [replyFiles, setReplyFiles] = useState<{ [postId: string]: File[] }>({});
 
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
-
-  // Componente mejorado para renderizar archivos adjuntos
+  
+  // Componente para renderizar archivos adjuntos
   const EnhancedFileAttachment = ({ file, onImageClick }: { file: any; onImageClick?: (url: string) => void }) => {
     const isImage = file.file_type?.startsWith('image/');
     const formatFileSize = (bytes: number) => {
+      if (!bytes) return '0 B';
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
       return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -125,14 +126,12 @@ export default function Comunidad() {
               className="w-full h-32 object-cover"
               loading="lazy"
             />
-            {/* Overlay con información */}
             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-end">
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 transform translate-y-full group-hover:translate-y-0 transition-transform duration-200">
                 <p className="text-white text-xs font-medium truncate">{file.file_name}</p>
                 <p className="text-white/80 text-xs">{formatFileSize(file.file_size)}</p>
               </div>
             </div>
-            {/* Icono de zoom */}
             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
               <div className="bg-white/90 rounded-full p-1">
                 <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -145,7 +144,6 @@ export default function Comunidad() {
       );
     }
 
-    // Para archivos no-imagen
     const getFileIcon = (type: string) => {
       if (type.includes('pdf')) return '📄';
       if (type.includes('document') || type.includes('word')) return '📝';
@@ -158,7 +156,12 @@ export default function Comunidad() {
     };
 
     return (
-      <div className="bg-muted/50 hover:bg-muted transition-colors duration-200 rounded-lg p-3 border border-border/50 hover:border-border cursor-pointer group">
+      <a 
+        href={file.file_url} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="bg-muted/50 hover:bg-muted transition-colors duration-200 rounded-lg p-3 border border-border/50 hover:border-border cursor-pointer group block"
+      >
         <div className="flex items-center gap-3">
           <div className="text-2xl">{getFileIcon(file.file_type)}</div>
           <div className="flex-1 min-w-0">
@@ -169,22 +172,160 @@ export default function Comunidad() {
               {formatFileSize(file.file_size)}
             </p>
           </div>
-          <a 
-            href={file.file_url} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs bg-primary text-primary-foreground px-2 py-1 rounded-md hover:bg-primary/90 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-            Abrir
-          </a>
         </div>
-      </div>
+      </a>
     );
   };
+
+  // Componente para respuesta individual con estilo chat
+  const ReplyComponent = ({ 
+    reply, 
+    postId, 
+    currentUserId,
+    handleDeleteReply,
+    setSelectedImage
+  }: { reply: any; postId: string; currentUserId: string; handleDeleteReply: (replyId: string, postId: string) => void; setSelectedImage: (url: string | null) => void; }) => {
+    const isAdmin = reply.author_role === 'admin';
+    const isCurrentUser = reply.author_id === currentUserId;
+
+    return (
+       <div className={`flex gap-3 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
+         {!isCurrentUser && (
+           <Avatar className="h-8 w-8">
+             <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+               {reply.author_name?.charAt(0)?.toUpperCase() || 'U'}
+             </AvatarFallback>
+           </Avatar>
+         )}
+         <div className={`max-w-[80%] space-y-1 ${isCurrentUser ? 'items-end' : 'items-start'} flex flex-col`}>
+           <div className={`group relative transition-all duration-200 hover:shadow-md rounded-2xl p-3 ${
+             isCurrentUser
+               ? 'bg-primary text-primary-foreground rounded-br-none'
+               : isAdmin
+                 ? 'bg-gradient-to-r from-orange-500/10 to-orange-600/20 border border-orange-200 rounded-bl-none text-foreground'
+                 : 'bg-muted hover:bg-muted/80 rounded-bl-none text-foreground'
+           }`}>
+             <div className={`flex items-center gap-2 mb-1 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'}`}>
+               <span className="font-medium text-sm">{reply.author_name}</span>
+               {isAdmin && (
+                 <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                   isCurrentUser
+                     ? 'bg-primary-foreground/20 text-primary-foreground'
+                     : 'bg-orange-500 text-white'
+                 }`}>
+                   Admin
+                 </span>
+               )}
+             </div>
+             <p className="leading-relaxed text-sm">{reply.content}</p>
+ 
+             {/* Archivos adjuntos */}
+             {reply.files && reply.files.length > 0 && (
+               <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                 {reply.files.map((file: any) => {
+                   const isImage = file.file_type?.startsWith('image/');
+                   if (isImage) {
+                     return (
+                       <div
+                         key={file.id}
+                         className="group relative aspect-square overflow-hidden rounded-lg cursor-pointer"
+                         onClick={() => setSelectedImage(file.file_url)}
+                       >
+                         <img
+                           src={file.file_url}
+                           alt={file.file_name}
+                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                           loading="lazy"
+                         />
+                         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                       </div>
+                     );
+                   }
+ 
+                   const formatFileSize = (bytes: number) => {
+                     if (!bytes) return '0 B';
+                     if (bytes < 1024) return `${bytes} B`;
+                     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+                     return `${(bytes / 1048576).toFixed(1)} MB`;
+                   };
+ 
+                   const getFileIcon = (type: string) => {
+                     if (type?.includes('pdf')) return '📄';
+                     if (type?.includes('document') || type?.includes('word')) return '📝';
+                     if (type?.includes('spreadsheet') || type?.includes('excel')) return '📊';
+                     return '📎';
+                   };
+ 
+                   return (
+                     <div key={file.id} className={`col-span-full flex items-center gap-2 p-2 rounded-lg ${
+                       isCurrentUser ? 'bg-primary-foreground/10' : 'bg-background/50'
+                     }`}>
+                       <div className="text-lg">{getFileIcon(file.file_type)}</div>
+                       <div className="flex-1 min-w-0">
+                         <p className={`font-medium text-xs truncate ${
+                           isCurrentUser ? 'text-primary-foreground' : 'text-foreground'
+                         }`}>
+                           {file.file_name}
+                         </p>
+                         <p className={`text-xs ${
+                           isCurrentUser ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                         }`}>
+                           {formatFileSize(file.file_size)}
+                         </p>
+                       </div>
+                       <a
+                         href={file.file_url}
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         className={`text-xs px-2 py-1 rounded-md transition-colors ${
+                           isCurrentUser
+                             ? 'bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30'
+                             : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                         }`}
+                       >
+                         Ver
+                       </a>
+                     </div>
+                   );
+                 })}
+               </div>
+             )}
+           </div>
+ 
+           <div className={`flex items-center gap-2 mt-1 text-xs text-muted-foreground ${
+             isCurrentUser ? 'flex-row-reverse' : 'flex-row'
+           }`}>
+             <span>
+               {new Date(reply.created_at).toLocaleDateString('es-ES', {
+                 day: 'numeric',
+                 month: 'short',
+                 hour: '2-digit',
+                 minute: '2-digit'
+               })}
+             </span>
+             {(user?.id === reply.author_id || profile?.role === 'admin' || profile?.role === 'formador') && (
+               <>
+                 <span>•</span>
+                 <button
+                   onClick={() => handleDeleteReply(reply.id, postId)}
+                   className="text-destructive hover:underline"
+                 >
+                   Eliminar
+                 </button>
+               </>
+             )}
+           </div>
+         </div>
+         {isCurrentUser && (
+           <Avatar className="h-8 w-8">
+             <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+               {reply.author_name?.charAt(0)?.toUpperCase() || 'U'}
+             </AvatarFallback>
+           </Avatar>
+         )}
+       </div>
+     );
+   };
 
   useEffect(() => {
     fetchPosts();
@@ -793,89 +934,28 @@ export default function Comunidad() {
 
   // Eliminar publicación y sus archivos en Storage (post files + reply files)
   const handleDeletePost = async (post: ForumPost) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta publicación? Esta acción eliminará también los archivos adjuntos y no se puede deshacer.')) {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta publicación? Esta acción no se puede deshacer.')) {
       return;
     }
 
     try {
-      // 1) Obtener archivos asociados a la publicación
-      const { data: postFiles, error: postFilesError } = await supabase
-        .from('forum_post_files')
-        .select('id, file_url')
-        .eq('post_id', post.id);
-
-      if (postFilesError) {
-        console.error('Error fetching post files:', postFilesError);
-      }
-
-      // 2) Obtener replies y sus archivos
-      const { data: replies } = await supabase
-        .from('forum_post_replies')
-        .select('id')
-        .eq('post_id', post.id);
-
-      const replyIds = (replies || []).map((r: any) => r.id);
-
-      let replyFiles: any[] = [];
-      if (replyIds.length > 0) {
-        const { data: rf, error: rfError } = await supabase
-          .from('forum_reply_files' as any)
-          .select('id, file_url')
-          .in('reply_id', replyIds as any);
-
-        if (rfError) console.error('Error fetching reply files:', rfError);
-        replyFiles = rf || [];
-      }
-
-      // 3) Concat all files to delete from Storage
-      const filesToDelete = [ ...(postFiles || []), ...replyFiles ];
-
-      // Helper to extract bucket and path from public URL
-      const extractBucketAndPath = (publicUrl: string) => {
-        try {
-          const m = publicUrl.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
-          if (m && m[1] && m[2]) return { bucket: m[1], path: decodeURIComponent(m[2]) };
-        } catch (e) {
-          console.error('Error parsing publicUrl:', publicUrl, e);
-        }
-        return null;
-      };
-
-      // 4) Remove objects from Storage (best-effort)
-      for (const f of filesToDelete) {
-        if (!f || !f.file_url) continue;
-        const info = extractBucketAndPath(f.file_url);
-        if (!info) {
-          console.warn('No se pudo extraer bucket/path de:', f.file_url);
-          continue;
-        }
-
-        try {
-          const { error: removeError } = await supabase.storage.from(info.bucket).remove([info.path]);
-          if (removeError) {
-            console.error('Error removing object from storage:', info.bucket, info.path, removeError);
-          } else {
-            console.log('Removed from storage:', info.bucket, info.path);
-          }
-        } catch (e) {
-          console.error('Exception removing storage object:', e);
-        }
-      }
-
-      // 5) Finalmente eliminar la publicación (las filas relacionadas deberían eliminarse por cascade si está configurado)
+      // La base de datos está configurada para eliminar en cascada:
+      // - Al borrar un post, se borran sus likes, replies y post_files.
+      // - Al borrar un reply, se borran sus reply_files.
+      // - Un trigger en la DB se encarga de borrar los archivos de Storage.
       const { error: deleteError } = await supabase
         .from('forum_posts')
         .delete()
         .eq('id', post.id);
 
       if (deleteError) throw deleteError;
-
+      
       toast({
         title: 'Publicación eliminada',
-        description: 'La publicación y sus archivos asociados fueron eliminados',
+        description: 'La publicación y todo su contenido asociado han sido eliminados.',
       });
 
-      // Refrescar listados
+      // Actualizar la UI
       fetchPosts();
       fetchForums();
     } catch (error: any) {
@@ -1369,264 +1449,6 @@ export default function Comunidad() {
     }
   };
 
-  // Componente para respuesta individual con estilo chat
-  const ReplyComponent = ({ reply, postId, currentUserId }: { reply: any; postId: string; currentUserId: string }) => {
-    const isAdmin = reply.author_role === 'admin';
-    const isCurrentUser = reply.author_id === currentUserId;
-    const nestedReplies = replies[`nested_${reply.id}`] || [];
-
-    return (
-      <div className={`space-y-3 ${isCurrentUser ? 'ml-8' : 'mr-8'}`}>
-        {/* RESPUESTA PRINCIPAL */}
-        <div className={`flex gap-3 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0 ${
-            isAdmin 
-              ? 'bg-primary text-primary-foreground' 
-              : 'bg-muted text-muted-foreground'
-          }`}>
-            {reply.author_name?.charAt(0)?.toUpperCase() || 'U'}
-          </div>
-          
-          <div className={`max-w-[70%] ${isCurrentUser ? 'items-end' : 'items-start'} flex flex-col`}>
-            {/* Bubble del mensaje */}
-            <div className={`group relative transition-all duration-200 hover:shadow-md rounded-2xl p-4 ${
-              isCurrentUser
-                ? 'bg-primary text-primary-foreground rounded-br-md'
-                : isAdmin 
-                  ? 'bg-gradient-to-r from-orange-500/10 to-orange-600/20 border border-orange-200 rounded-bl-md text-foreground'
-                  : 'bg-muted hover:bg-muted/80 rounded-bl-md text-foreground'
-            }`}>
-              
-              {/* Header del mensaje */}
-              <div className={`flex items-center gap-2 mb-2 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'}`}>
-                <span className="font-medium text-sm">{reply.author_name}</span>
-                {isAdmin && (
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    isCurrentUser 
-                      ? 'bg-primary-foreground/20 text-primary-foreground' 
-                      : 'bg-orange-500 text-white'
-                  }`}>
-                    Admin
-                  </span>
-                )}
-              </div>
-              
-              {/* Contenido del mensaje */}
-              <p className="leading-relaxed text-sm">{reply.content}</p>
-              
-              {/* Archivos adjuntos */}
-              {reply.files && reply.files.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <div className="grid grid-cols-1 gap-2">
-                    {reply.files.map((file: any) => {
-                      const isImage = file.file_type?.startsWith('image/');
-                      const formatFileSize = (bytes: number) => {
-                        if (bytes < 1024) return `${bytes} B`;
-                        if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-                        return `${(bytes / 1048576).toFixed(1)} MB`;
-                      };
-
-                      if (isImage) {
-                        return (
-                          <div key={file.id} className="group relative max-w-xs">
-                            <div 
-                              className="relative overflow-hidden rounded-lg cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                              onClick={() => setSelectedImage(file.file_url)}
-                            >
-                              <img 
-                                src={file.file_url} 
-                                alt={file.file_name}
-                                className="w-full h-auto max-h-48 object-cover"
-                                loading="lazy"
-                              />
-                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center">
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                  <div className="bg-white/90 rounded-full p-2">
-                                    <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                                    </svg>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            <p className={`text-xs mt-1 ${isCurrentUser ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                              {file.file_name} • {formatFileSize(file.file_size)}
-                            </p>
-                          </div>
-                        );
-                      }
-
-                      // Para archivos no-imagen
-                      const getFileIcon = (type: string) => {
-                        if (type?.includes('pdf')) return '📄';
-                        if (type?.includes('document') || type?.includes('word')) return '📝';
-                        if (type?.includes('spreadsheet') || type?.includes('excel')) return '📊';
-                        return '📎';
-                      };
-
-                      return (
-                        <div key={file.id} className={`flex items-center gap-2 p-2 rounded-lg ${
-                          isCurrentUser ? 'bg-primary-foreground/10' : 'bg-background/50'
-                        }`}>
-                          <div className="text-lg">{getFileIcon(file.file_type)}</div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-medium text-xs truncate ${
-                              isCurrentUser ? 'text-primary-foreground' : 'text-foreground'
-                            }`}>
-                              {file.file_name}
-                            </p>
-                            <p className={`text-xs ${
-                              isCurrentUser ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                            }`}>
-                              {formatFileSize(file.file_size)}
-                            </p>
-                          </div>
-                          <button 
-                            onClick={() => setSelectedImage(file.file_url)}
-                            className={`text-xs px-2 py-1 rounded-md transition-colors ${
-                              isCurrentUser 
-                                ? 'bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30' 
-                                : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                            }`}
-                          >
-                            Ver
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Footer con timestamp y botón responder */}
-            <div className={`flex items-center gap-2 mt-1 text-xs text-muted-foreground ${
-              isCurrentUser ? 'flex-row-reverse' : 'flex-row'
-            }`}>
-              <span>
-                {new Date(reply.created_at).toLocaleDateString('es-ES', {
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </span>
-              <span>•</span>
-              <button
-                onClick={() => setShowNestedForm(showNestedForm === reply.id ? null : reply.id)}
-                className="hover:text-foreground transition-colors hover:underline"
-              >
-                {showNestedForm === reply.id ? 'Cancelar' : 'Responder'}
-              </button>
-              {/* Botón Eliminar para autor, admin o formador */}
-              {(user?.id === reply.author_id || profile?.role === 'admin' || profile?.role === 'formador') && (
-                <button
-                  onClick={() => {
-                    handleDeleteReply(reply.id, postId);
-                  }}
-                  className="text-destructive hover:underline ml-2"
-                >
-                  Eliminar
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* FORMULARIO PARA RESPUESTA ANIDADA */}
-        {showNestedForm === reply.id && (
-          <div className={`${isCurrentUser ? 'mr-12' : 'ml-12'} mt-3`}>
-            <div className="bg-muted/30 rounded-lg p-3 border border-border/50">
-              <div className="flex items-start gap-2">
-                <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium flex-shrink-0">
-                  {(user as any)?.full_name?.charAt(0)?.toUpperCase() || 'U'}
-                </div>
-                
-                <div className="flex-1 space-y-2">
-                  <Textarea
-                    value={nestedReplyContent[reply.id] || ''}
-                    onChange={(e) => setNestedReplyContent(prev => ({
-                      ...prev,
-                      [reply.id]: e.target.value
-                    }))}
-                    placeholder="Responder a este comentario..."
-                    className="w-full min-h-[60px]"
-                    rows={2}
-                  />
-                  
-                  {/* Archivos seleccionados para respuesta anidada */}
-                  {nestedReplyFiles[reply.id] && nestedReplyFiles[reply.id].length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {nestedReplyFiles[reply.id].map((file, index) => (
-                        <div key={index} className="flex items-center gap-1 bg-muted px-2 py-1 rounded text-xs">
-                          <span className="truncate max-w-[150px]">{file.name}</span>
-                          <button
-                            onClick={() => setNestedReplyFiles(prev => ({
-                              ...prev,
-                              [reply.id]: prev[reply.id]?.filter((_, i) => i !== index) || []
-                            }))}
-                            className="text-muted-foreground hover:text-foreground"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*,application/pdf,.doc,.docx"
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            setNestedReplyFiles(prev => ({
-                              ...prev,
-                              [reply.id]: [...(prev[reply.id] || []), ...Array.from(e.target.files!)]
-                            }));
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                      </svg>
-                      📎
-                    </label>
-                    
-                    <button
-                      onClick={() => handleAddNestedReply(reply.id, nestedReplyContent[reply.id], nestedReplyFiles[reply.id] || [])}
-                      disabled={!nestedReplyContent[reply.id]?.trim() || isSubmitting}
-                      className="px-3 py-1 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSubmitting ? 'Enviando...' : 'Enviar'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* RESPUESTAS ANIDADAS */}
-        {nestedReplies.length > 0 && (
-          <div className={`space-y-2 ${isCurrentUser ? 'mr-6' : 'ml-6'}`}>
-            {nestedReplies.map((nestedReply: any) => (
-              <ReplyComponent 
-                key={nestedReply.id} 
-                reply={nestedReply} 
-                postId={postId} 
-                currentUserId={currentUserId}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -1647,6 +1469,14 @@ export default function Comunidad() {
         </div>
         <div className="flex gap-2">
           <Dialog open={showCreateForumDialog} onOpenChange={setShowCreateForumDialog}>
+            {isTeacherOrAdmin && (
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Crear Foro
+                </Button>
+              </DialogTrigger>
+            )}
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Crear Nuevo Foro</DialogTitle>
@@ -1814,23 +1644,6 @@ export default function Comunidad() {
           </Dialog>
         </div>
       </div>
-
-      {/* Crear Foro - Primera caja */}
-      {isTeacherOrAdmin && (
-        <Card className="border-2 border-dashed border-muted-foreground/25">
-          <CardContent className="p-6 text-center">
-            <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">Crear Nuevo Foro</h3>
-            <p className="text-muted-foreground mb-4">
-              Crea un espacio de discusión para un programa específico
-            </p>
-            <Button onClick={() => setShowCreateForumDialog(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Crear Foro
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Foros existentes y sus publicaciones */}
       {forums.length > 0 && (
@@ -2129,8 +1942,10 @@ export default function Comunidad() {
                         <ReplyComponent 
                           key={reply.id} 
                           reply={reply} 
-                          postId={post.id} 
+                          postId={post.id}
                           currentUserId={user?.id || ''}
+                          handleDeleteReply={handleDeleteReply}
+                          setSelectedImage={setSelectedImage}
                         />
                                 ))}
                               </div>
