@@ -22,6 +22,7 @@ interface Lesson {
   duration_minutes: number;
   has_assignment: boolean;
   has_materials: boolean;
+  approval_form_url?: string | null;
   course_id: string;
   course?: {
     title: string;
@@ -109,7 +110,7 @@ export default function LessonDetail() {
     const mappedMaterials = (materialsData || []).map(m => ({
       id: m.id,
       title: m.title,
-      type: m.material_type as 'file' | 'link',  // ✅ Mapear material_type -> type
+      type: m.type as 'file' | 'link',
       file_url: m.file_url,
       url: m.url
     }));
@@ -362,44 +363,14 @@ export default function LessonDetail() {
                   </div>
                   {profile?.role === 'student' && (
                     <div className="space-y-2 p-3 border rounded-md">
-                      <Button
-                        className="w-full"
-                        onClick={async () => {
-                          try {
-                            // Crear notificación en assignments
-                            const { error } = await supabase
-                              .from('assignments')
-                              .insert({
-                                user_id: profile.id,
-                                lesson_id: lesson.id,
-                                status: 'submitted',
-                                file_url: null,
-                                text_answer: null,
-                                max_grade: 100
-                              });
-                            
-                            if (error) throw error;
-                            
-                            // Abrir Dropbox
-                            window.open('https://www.dropbox.com/request/LlaRtF8KefIoXHjdg0Uo', '_blank');
-                            
-                            // Mostrar toast de éxito
-                            toast({
-                              title: "Trabajo enviado",
-                              description: "Se notificó al profesor. Sube tu archivo en Dropbox."
-                            });
-                            
-                          } catch (error: any) {
-                            toast({
-                              title: "Error",
-                              description: error.message,
-                              variant: "destructive"
-                            });
-                          }
-                        }}
-                      >
-                        Enviar trabajo práctico (Dropbox)
-                      </Button>
+                      {lesson.approval_form_url && (
+                        <Button
+                          className="w-full"
+                          onClick={() => window.open(lesson.approval_form_url!, '_blank', 'noopener,noreferrer')}
+                        >
+                          Enviar trabajo práctico
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>

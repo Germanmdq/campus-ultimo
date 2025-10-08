@@ -40,6 +40,7 @@ export function EditLessonForm({ open, onOpenChange, onSuccess, lessonId }: Edit
   const [hasAssignment, setHasAssignment] = useState(false);
   const [assignmentInstructions, setAssignmentInstructions] = useState('');
   const [requiresApproval, setRequiresApproval] = useState(false);
+  const [approvalFormUrl, setApprovalFormUrl] = useState('');
   const [prerequisiteId, setPrerequisiteId] = useState('none');
   const [hasMaterials, setHasMaterials] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -85,6 +86,7 @@ export function EditLessonForm({ open, onOpenChange, onSuccess, lessonId }: Edit
       setHasAssignment(data.has_assignment || false);
       setAssignmentInstructions(data.assignment_instructions || '');
       setRequiresApproval(data.requires_admin_approval || false);
+      setApprovalFormUrl(data.approval_form_url || '');
       setPrerequisiteId(data.prerequisite_lesson_id || 'none');
       setHasMaterials(data.has_materials || false);
       
@@ -215,6 +217,7 @@ export function EditLessonForm({ open, onOpenChange, onSuccess, lessonId }: Edit
           has_assignment: hasAssignment,
           assignment_instructions: hasAssignment ? assignmentInstructions.trim() || null : null,
           requires_admin_approval: requiresApproval,
+          approval_form_url: hasAssignment ? (approvalFormUrl.trim() || null) : null,
           prerequisite_lesson_id: (prerequisiteId && prerequisiteId !== 'none') ? prerequisiteId : null,
           has_materials: hasMaterials,
         })
@@ -391,17 +394,16 @@ export function EditLessonForm({ open, onOpenChange, onSuccess, lessonId }: Edit
           </div>
 
           {hasAssignment && (
-            <div>
-              <Label htmlFor="assignmentInstructions">Instrucciones de la Tarea</Label>
-              <Textarea
-                id="assignmentInstructions"
-                value={assignmentInstructions}
-                onChange={(e) => setAssignmentInstructions(e.target.value)}
-                placeholder="Instrucciones para el estudiante..."
-                rows={3}
-                disabled={loading}
-              />
-            </div>
+            <>
+              <div>
+                <Label htmlFor="assignmentInstructions">Instrucciones de la Tarea</Label>
+                <Textarea id="assignmentInstructions" value={assignmentInstructions} onChange={(e) => setAssignmentInstructions(e.target.value)} placeholder="Instrucciones para el estudiante..." rows={3} disabled={loading} />
+              </div>
+              <div>
+                <Label htmlFor="approvalFormUrl">URL de Entrega (Dropbox, etc.)</Label>
+                <Input id="approvalFormUrl" value={approvalFormUrl} onChange={(e) => setApprovalFormUrl(e.target.value)} placeholder="https://www.dropbox.com/request/..." disabled={loading} />
+              </div>
+            </>
           )}
 
           <div className="flex items-center space-x-2">

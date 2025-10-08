@@ -35,7 +35,6 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [slug, setSlug] = useState('');
-  const [courseId, setCourseId] = useState('');
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState('');
@@ -64,10 +63,10 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   }, [open, inline]);
 
   useEffect(() => {
-    if (selectedCourses.length > 0) {
+    if (selectedCourses.length > 0) { // Solo buscar prerequisitos si hay cursos seleccionados
       fetchPrerequisites();
     }
-  }, [selectedCourses]);
+  }, [selectedCourses]); // Dependencia solo en selectedCourses
 
   const fetchCourses = async () => {
     try {
@@ -96,7 +95,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   };
 
   const fetchPrerequisites = async () => {
-    if (selectedCourses.length === 0) {
+    if (selectedCourses.length === 0) { // Si no hay cursos seleccionados, no hay prerequisitos
       setPrerequisites([]);
       return;
     }
@@ -127,10 +126,6 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
       .trim();
   };
 
-  const ensureUniqueLessonSlug = async (baseSlug: string, courseId: string) => {
-    return `${baseSlug}-${courseId.substring(0, 8)}`;
-  };
-
   const handleTitleChange = (value: string) => {
     setTitle(value);
     setSlug(generateSlug(value));
@@ -148,33 +143,48 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
       return;
     }
 
+    if (selectedCourses.length === 0) {
+      toast({ title: "Error", description: "Debes seleccionar al menos un curso", variant: "destructive" });
+      return;
+    }
+
     setLoading(true);
+    console.log('🔥 INICIO handleSubmit');
     try {
-      const base = generateSlug(title.trim());
-      const uniqueSlug = await ensureUniqueLessonSlug(base, selectedCourses[0]);
-      
+      const baseSlug = generateSlug(title.trim());
+      const randomSuffix = Math.random().toString(36).substring(2, 8);
+      const uniqueSlug = `${baseSlug}-${randomSuffix}`;
+      console.log('🔥 Slug generado:', uniqueSlug);
       // 1. Crear la lección (sin course_id ya que usaremos lesson_courses)
+      console.log('🔥 Insertando lección con datos:', {
+        title: title.trim(),
+        slug: uniqueSlug,
+        course_id: selectedCourses[0]
+      });
       const { data, error } = await supabase
         .from('lessons')
         .insert([{
           title: title.trim(),
           description: description.trim() || null,
           slug: uniqueSlug,
-          course_id: selectedCourses[0] || null,
+          course_id: selectedCourses[0], // Asignar el primer curso como principal (requerido por la tabla lessons)
           video_url: videoUrl.trim() || null,
           duration_minutes: duration ? parseInt(duration) : 0,
           has_assignment: hasAssignment,
           assignment_instructions: hasAssignment ? assignmentInstructions.trim() || null : null,
           requires_admin_approval: requiresApproval,
-          approval_form_url: requiresApproval ? (approvalFormUrl.trim() || null) : null,
+          approval_form_url: hasAssignment ? (approvalFormUrl.trim() || null) : null,
           prerequisite_lesson_id: (prerequisiteId && prerequisiteId !== 'none') ? prerequisiteId : null,
-          has_materials: hasMaterials,
-          sort_order: prerequisites.length + 1
+          has_materials: hasMaterials, // Este campo ahora se usa para indicar si tiene materiales
+          sort_order: prerequisites.length + 1, // Orden de la lección
         }])
         .select('id')
         .single();
 
       if (error) throw error;
+
+      console.log('🔥 Lección creada con ID:', data.id);
+      if (!data?.id) throw new Error("No se pudo obtener el ID de la lección creada.");
 
       // 2. Crear las relaciones en lesson_courses (many-to-many)
       const lessonCourseInserts = selectedCourses.map((courseId, index) => ({
@@ -188,6 +198,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
         .insert(lessonCourseInserts);
 
       if (relationError) throw relationError;
+      console.log('🔥 Relaciones creadas exitosamente');
 
       toast({
         title: "Lección creada",
@@ -207,6 +218,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
         onSuccess();
       }
     } catch (error: any) {
+      console.error('🔥 ERROR COMPLETO:', error);
       toast({
         title: "Error",
         description: error.message || "No se pudo crear la lección",
@@ -221,7 +233,6 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
     setTitle('');
     setDescription('');
     setSlug('');
-    setCourseId('');
     setSelectedCourses([]);
     setVideoUrl('');
     setDuration('');
@@ -248,7 +259,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
         <h3 className="text-lg font-semibold mb-2">Crear Nueva Lección</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Asignar a cursos</Label>
+            <Label>Asignar a cursos (selecciona uno o varios)</Label>
             <div className="space-y-2 border rounded-md p-3 max-h-60 overflow-y-auto">
               {availableCourses.map(course => (
                 <div key={course.id} className="flex items-center space-x-2">
@@ -354,19 +365,18 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
           </div>
 
           {hasAssignment && (
-            <div>
-              <Label htmlFor="assignmentInstructions">Instrucciones de la Tarea</Label>
-              <Textarea
-                id="assignmentInstructions"
-                value={assignmentInstructions}
-                onChange={(e) => setAssignmentInstructions(e.target.value)}
-                placeholder="Instrucciones para el estudiante..."
-                rows={3}
-                disabled={loading}
-              />
-            </div>
+            <> {/* Agrupamos estos campos para que aparezcan juntos si hasAssignment es true */}
+              <div>
+                <Label htmlFor="assignmentInstructions">Instrucciones de la Tarea</Label>
+                <Textarea id="assignmentInstructions" value={assignmentInstructions} onChange={(e) => setAssignmentInstructions(e.target.value)} placeholder="Instrucciones para el estudiante..." rows={3} disabled={loading} />
+              </div>
+              <div>
+                <Label htmlFor="approvalFormUrl">URL de Entrega (Dropbox, etc.)</Label>
+                <Input id="approvalFormUrl" value={approvalFormUrl} onChange={(e) => setApprovalFormUrl(e.target.value)} placeholder="https://www.dropbox.com/request/..." disabled={loading} />
+              </div>
+            </>
           )}
-
+          
           <div className="flex items-center space-x-2">
             <Checkbox 
               id="requiresApproval" 
@@ -376,19 +386,6 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
             />
             <Label htmlFor="requiresApproval">Requiere aprobación del administrador</Label>
           </div>
-
-          {requiresApproval && (
-            <div>
-              <Label htmlFor="approvalFormUrl">URL del Formulario de Aprobación</Label>
-              <Input
-                id="approvalFormUrl"
-                value={approvalFormUrl}
-                onChange={(e) => setApprovalFormUrl(e.target.value)}
-                placeholder="https://docs.google.com/forms/..."
-                disabled={loading}
-              />
-            </div>
-          )}
 
           {/* Sección de materiales - SIEMPRE DISPONIBLE */}
           <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
@@ -548,17 +545,16 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
           </div>
           
           {hasAssignment && (
-            <div>
-              <Label htmlFor="assignmentInstructions">Instrucciones de la Tarea</Label>
-              <Textarea
-                id="assignmentInstructions"
-                value={assignmentInstructions}
-                onChange={(e) => setAssignmentInstructions(e.target.value)}
-                placeholder="Instrucciones para el estudiante..."
-                rows={3}
-                disabled={loading}
-              />
-            </div>
+            <>
+              <div>
+                <Label htmlFor="assignmentInstructions">Instrucciones de la Tarea</Label>
+                <Textarea id="assignmentInstructions" value={assignmentInstructions} onChange={(e) => setAssignmentInstructions(e.target.value)} placeholder="Instrucciones para el estudiante..." rows={3} disabled={loading} />
+              </div>
+              <div>
+                <Label htmlFor="approvalFormUrl">URL de Entrega (Dropbox, etc.)</Label>
+                <Input id="approvalFormUrl" value={approvalFormUrl} onChange={(e) => setApprovalFormUrl(e.target.value)} placeholder="https://www.dropbox.com/request/..." disabled={loading} />
+              </div>
+            </>
           )}
           
           <div className="flex items-center space-x-2">
@@ -569,22 +565,6 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
               disabled={loading}
             />
             <Label htmlFor="requiresApproval">Requiere aprobación del administrador</Label>
-          </div>
-          
-          {/* Sección de materiales - SIEMPRE DISPONIBLE */}
-          <div className="space-y-3 p-4 border rounded-lg bg-muted/50">
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="hasMaterials" 
-                checked={hasMaterials} 
-                onCheckedChange={(checked) => setHasMaterials(checked as boolean)}
-                disabled={loading}
-              />
-              <Label htmlFor="hasMaterials" className="text-sm font-medium">Cargar materiales al crear la lección</Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Si marcas esta opción, se abrirá automáticamente el diálogo para cargar materiales inmediatamente después de crear la lección.
-            </p>
           </div>
           
           <div className="flex gap-2 pt-4">
