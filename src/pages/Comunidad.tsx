@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import ForumFileUpload from '@/components/ui/forum-file-upload';
-import { uploadFiles as uploadReplyFilesFromComponent } from '@/components/ui/forum-file-upload';
 import { uploadNestedFiles } from '@/components/ui/forum-nested-file-upload';
 
 interface ForumPost {
@@ -426,7 +426,7 @@ export default function Comunidad() {
     const uploadedFiles = [];
 
     try {
-      // Verificar que el bucket existe
+      // Verificar que el bucket existe; si no, intentar crearlo.
       const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
       if (bucketsError) {
         console.warn('No se pudieron listar buckets:', bucketsError);
@@ -434,13 +434,26 @@ export default function Comunidad() {
 
       const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
       if (!forumFilesBucket) {
-        console.log('📤 Bucket forum-files ya existe, procediendo con subida...');
-
-        console.log('✅ Bucket forum-files creado exitosamente');
+        // Intentar crear el bucket si no existe. Si falla por permisos, reportamos y abortamos.
+        console.log(`Bucket 'forum-files' no encontrado. Intentando crearlo...`);
+        const { error: createError } = await supabase.storage.createBucket('forum-files', { public: true });
+        if (createError) {
+          console.error('No se pudo crear el bucket forum-files:', createError);
+          toast({
+            title: 'Error',
+            description: 'No se pudo crear el bucket de archivos (forum-files). Revisa permisos en Supabase.',
+            variant: 'destructive'
+          });
+          setUploadingFiles(false);
+          return [];
+        }
+        console.log(`✅ Bucket 'forum-files' creado exitosamente`);
         toast({
           title: "✅ Bucket creado",
           description: "El bucket 'forum-files' fue creado automáticamente",
         });
+      } else {
+        console.log("✅ Bucket 'forum-files' existe. Procediendo con la subida...");
       }
 
       for (const file of selectedFiles) {
@@ -463,6 +476,7 @@ export default function Comunidad() {
             .from('forum-files')
             .getPublicUrl(filePath);
 
+          // Para posts mantenemos la inserción en DB aquí (post_id disponible)
           const { error: dbError } = await supabase
             .from('forum_post_files')
             .insert([{
@@ -507,24 +521,35 @@ export default function Comunidad() {
     const uploadedFiles = [];
 
     try {
-      // Verificar que el bucket existe
-      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-      if (bucketsError) {
-        console.warn('No se pudieron listar buckets:', bucketsError);
-      }
+        // Verificar que el bucket existe; si no, intentar crearlo.
+        const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+        if (bucketsError) {
+          console.warn('No se pudieron listar buckets:', bucketsError);
+        }
 
-      const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
-      if (!forumFilesBucket) {
-        console.log('📤 Bucket forum-files ya existe, procediendo con subida...');
+        const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
+        if (!forumFilesBucket) {
+          console.log(`Bucket 'forum-files' no encontrado. Intentando crearlo...`);
+          const { error: createError } = await supabase.storage.createBucket('forum-files', { public: true });
+          if (createError) {
+            console.error('No se pudo crear el bucket forum-files:', createError);
+            toast({
+              title: 'Error',
+              description: 'No se pudo crear el bucket de archivos (forum-files). Revisa permisos en Supabase.',
+              variant: 'destructive'
+            });
+            return [];
+          }
+          console.log(`✅ Bucket 'forum-files' creado exitosamente`);
+          toast({
+            title: "✅ Bucket creado",
+            description: "El bucket 'forum-files' fue creado automáticamente",
+          });
+        } else {
+          console.log("✅ Bucket 'forum-files' existe. Procediendo con la subida...");
+        }
 
-        console.log('✅ Bucket forum-files creado exitosamente');
-        toast({
-          title: "✅ Bucket creado",
-          description: "El bucket 'forum-files' fue creado automáticamente",
-        });
-      }
-
-      for (const file of files) {
+        for (const file of files) {
         try {
           const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
           const fileName = `reply-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
@@ -567,12 +592,6 @@ export default function Comunidad() {
   };
 
   const handleCreatePost = async () => {
-    console.log('🔥🔥🔥 CREAR POST - INICIO');
-    console.log('🔥 newPost:', newPost);
-    console.log('🔥 selectedFiles:', selectedFiles);
-    console.log('🔥 selectedFiles.length:', selectedFiles.length);
-    console.log('🔥 user:', user);
-
     if (!newPost.title.trim() || !newPost.content.trim()) {
       toast({
         title: "Error",
@@ -611,9 +630,6 @@ export default function Comunidad() {
         throw error;
       }
 
-      // Subir archivos si hay alguno
-      console.log('🔥 POST CREADO, ID:', data[0].id);
-      console.log('🔥 INICIANDO UPLOAD DE ARCHIVOS');
       if (selectedFiles.length > 0) {
         await uploadPostFiles(data[0].id);
       }
@@ -774,6 +790,157 @@ export default function Comunidad() {
       });
     }
   };
+
+  // Eliminar publicación y sus archivos en Storage (post files + reply files)
+  const handleDeletePost = async (post: ForumPost) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta publicación? Esta acción eliminará también los archivos adjuntos y no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      // 1) Obtener archivos asociados a la publicación
+      const { data: postFiles, error: postFilesError } = await supabase
+        .from('forum_post_files')
+        .select('id, file_url')
+        .eq('post_id', post.id);
+
+      if (postFilesError) {
+        console.error('Error fetching post files:', postFilesError);
+      }
+
+      // 2) Obtener replies y sus archivos
+      const { data: replies } = await supabase
+        .from('forum_post_replies')
+        .select('id')
+        .eq('post_id', post.id);
+
+      const replyIds = (replies || []).map((r: any) => r.id);
+
+      let replyFiles: any[] = [];
+      if (replyIds.length > 0) {
+        const { data: rf, error: rfError } = await supabase
+          .from('forum_reply_files' as any)
+          .select('id, file_url')
+          .in('reply_id', replyIds as any);
+
+        if (rfError) console.error('Error fetching reply files:', rfError);
+        replyFiles = rf || [];
+      }
+
+      // 3) Concat all files to delete from Storage
+      const filesToDelete = [ ...(postFiles || []), ...replyFiles ];
+
+      // Helper to extract bucket and path from public URL
+      const extractBucketAndPath = (publicUrl: string) => {
+        try {
+          const m = publicUrl.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+          if (m && m[1] && m[2]) return { bucket: m[1], path: decodeURIComponent(m[2]) };
+        } catch (e) {
+          console.error('Error parsing publicUrl:', publicUrl, e);
+        }
+        return null;
+      };
+
+      // 4) Remove objects from Storage (best-effort)
+      for (const f of filesToDelete) {
+        if (!f || !f.file_url) continue;
+        const info = extractBucketAndPath(f.file_url);
+        if (!info) {
+          console.warn('No se pudo extraer bucket/path de:', f.file_url);
+          continue;
+        }
+
+        try {
+          const { error: removeError } = await supabase.storage.from(info.bucket).remove([info.path]);
+          if (removeError) {
+            console.error('Error removing object from storage:', info.bucket, info.path, removeError);
+          } else {
+            console.log('Removed from storage:', info.bucket, info.path);
+          }
+        } catch (e) {
+          console.error('Exception removing storage object:', e);
+        }
+      }
+
+      // 5) Finalmente eliminar la publicación (las filas relacionadas deberían eliminarse por cascade si está configurado)
+      const { error: deleteError } = await supabase
+        .from('forum_posts')
+        .delete()
+        .eq('id', post.id);
+
+      if (deleteError) throw deleteError;
+
+      toast({
+        title: 'Publicación eliminada',
+        description: 'La publicación y sus archivos asociados fueron eliminados',
+      });
+
+      // Refrescar listados
+      fetchPosts();
+      fetchForums();
+    } catch (error: any) {
+      console.error('Error deleting post:', error);
+      toast({
+        title: 'Error',
+        description: `No se pudo eliminar la publicación: ${error.message || error}`,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Eliminar una respuesta individual y sus archivos en Storage
+  const handleDeleteReply = async (replyId: string, postId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta respuesta?')) {
+      return;
+    }
+    
+    deleteReplyMutation.mutate({ replyId, postId });
+  };
+
+  // React Query mutation: borrar reply y luego invalidar query 'posts'
+  const queryClient = (() => {
+    try {
+      return useQueryClient();
+    } catch (e) {
+      return null as any;
+    }
+  })();
+
+  const deleteReplyMutation = useMutation({
+    mutationFn: async ({ replyId, postId }: { replyId: string, postId: string }) => {
+      // Primero obtener y eliminar archivos (igual que en handleDeleteReply)
+      const { data: filesData } = await supabase
+        .from('forum_reply_files' as any)
+        .select('file_url')
+        .eq('reply_id', replyId);
+
+      if (filesData && filesData.length > 0) {
+        const filePaths = filesData.map((file: any) => {
+          const urlParts = file.file_url.split('/');
+          return urlParts.slice(urlParts.indexOf('forum-files') + 1).join('/');
+        });
+        const { error: removeError } = await supabase.storage.from('forum-files').remove(filePaths);
+        if (removeError) throw removeError;
+      }
+
+      const { error: deleteError } = await supabase
+        .from('forum_post_replies')
+        .delete()
+        .eq('id', replyId);
+
+      if (deleteError) throw deleteError;
+    },
+    onSuccess: (_, variables) => {
+      toast({ title: 'Éxito', description: 'La respuesta ha sido eliminada.' });
+      // Refrescar las respuestas del post específico y la lista de posts
+      fetchReplies(variables.postId);
+      fetchPosts();
+    },
+    onError: (error: any) => {
+      // Si falla, el estado no se tocó, solo mostramos el error
+      toast({ title: 'Error', description: error?.message || 'No se pudo eliminar la respuesta.', variant: 'destructive' });
+    }
+  });
 
 
 
@@ -943,11 +1110,6 @@ export default function Comunidad() {
     }
 
     try {
-      console.log('🚀 handleAddReply - INICIO');
-      console.log('🚀 handleAddReply - postId:', postId);
-      console.log('🚀 handleAddReply - user.id:', user.id);
-      console.log('🚀 handleAddReply - content:', replyContent);
-
       // 1. Crear la respuesta primero
       const { data: replyData, error: replyError } = await supabase
         .from('forum_post_replies')
@@ -964,31 +1126,42 @@ export default function Comunidad() {
         throw replyError;
       }
 
-      console.log('✅ Reply creado:', replyData);
-      console.log('🚀 handleAddReply - replyData.id:', replyData.id);
-
       // 2. Subir archivos si hay alguno
       const files = replyFiles[postId] || [];
-      console.log('🚀 handleAddReply - files:', files);
-      console.log('🚀 handleAddReply - tipo de files:', typeof files);
-      console.log('🚀 handleAddReply - es array?:', Array.isArray(files));
-      console.log('🚀 handleAddReply - files.length:', files.length);
       
       if (files.length > 0) {
         try {
           // Asegúrate de que files sea un array de File objects
           const filesArray = Array.isArray(files) ? files : [];
-          console.log('🚀 filesArray final:', filesArray);
-          console.log('🚀 filesArray.length:', filesArray.length);
-          
-          // ✅ LLAMADA CORRECTA - pasar parámetros separados, no como objeto
-          console.log('🚀 Llamando uploadFiles con archivos:', filesArray.length, 'replyId:', replyData.id);
-          const uploadedFiles = await uploadReplyFilesFromComponent(filesArray, replyData.id);
-          console.log('✅ Archivos subidos exitosamente:', uploadedFiles);
-          
-          // 🔍 DEBUG: Verificar que los archivos se guardaron en DB
-          await debugReplyFiles(replyData.id);
-          
+
+          // Subir archivos a Storage y obtener metadatos
+          const uploadedFiles = await uploadReplyFiles(postId);
+
+          // Insertar metadatos en DB (forum_reply_files) asociándolos al reply creado
+          for (const f of uploadedFiles) {
+            try {
+              const { error: insertError } = await supabase
+                .from('forum_reply_files' as any)
+                .insert([{
+                  reply_id: replyData.id,
+                  file_url: f.file_url,
+                  file_name: f.file_name,
+                  file_type: f.file_type,
+                  file_size: f.file_size
+                }]);
+
+              if (insertError) throw insertError;
+            } catch (err) {
+              console.error('Error inserting reply file metadata:', err);
+              // Continuar con el siguiente archivo, pero notificar
+              toast({
+                title: 'Error',
+                description: `No se pudo guardar metadata de ${f.file_name}`,
+                variant: 'destructive'
+              });
+            }
+          }
+
         } catch (error) {
           console.error('❌ Error subiendo archivos:', error);
           toast({
@@ -997,8 +1170,6 @@ export default function Comunidad() {
             variant: "destructive",
           });
         }
-      } else {
-        console.log('🚀 No hay archivos para subir');
       }
 
       // 3. Limpiar formularios
@@ -1014,7 +1185,6 @@ export default function Comunidad() {
       }));
 
       // 4. Actualizar comentarios y conteo de posts
-      console.log('🚀 Recargando replies...');
       await fetchReplies(postId);
       fetchPosts();
       
@@ -1022,17 +1192,7 @@ export default function Comunidad() {
         title: "Comentario agregado",
         description: "Tu comentario ha sido publicado",
       });
-      
-      console.log('✅ handleAddReply - COMPLETADO');
-      
     } catch (error: any) {
-      console.error('❌ Error adding reply:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
       toast({
         title: "Error",
         description: "No se pudo agregar el comentario",
@@ -1358,6 +1518,17 @@ export default function Comunidad() {
               >
                 {showNestedForm === reply.id ? 'Cancelar' : 'Responder'}
               </button>
+              {/* Botón Eliminar para autor, admin o formador */}
+              {(user?.id === reply.author_id || profile?.role === 'admin' || profile?.role === 'formador') && (
+                <button
+                  onClick={() => {
+                    handleDeleteReply(reply.id, postId);
+                  }}
+                  className="text-destructive hover:underline ml-2"
+                >
+                  Eliminar
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1870,40 +2041,17 @@ export default function Comunidad() {
                       {post.content}
                     </p>
                     
-                    {/* Mostrar archivos adjuntos */}
+                    {/* Mostrar archivos adjuntos (usar mismo componente visual que las respuestas) */}
                     {post.files && post.files.length > 0 && (
-                      <div className="mb-4">
+                      <div className="mt-4 space-y-2">
                         <p className="text-sm font-medium text-muted-foreground mb-2">Archivos adjuntos:</p>
-                        <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                        <div className="flex flex-wrap gap-3">
                           {post.files.map((file: ForumPostFile) => (
-                            <div key={file.id} className="flex items-center gap-2 p-2 bg-muted rounded">
-                              {file.file_type.startsWith('image/') ? (
-                                <img 
-                                  src={file.file_url} 
-                                  alt={file.file_name}
-                                  className="w-8 h-8 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity"
-                                  onClick={() => setSelectedImage(file.file_url)}
-                                />
-                              ) : (
-                                <div className="w-8 h-8 bg-accent rounded flex items-center justify-center">
-                                  📎
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm truncate">{file.file_name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {file.file_size ? `${(file.file_size / 1024 / 1024).toFixed(2)} MB` : ''}
-                                </p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => window.open(file.file_url, '_blank')}
-                                className="h-6 w-6 p-0"
-                              >
-                                ↗
-                              </Button>
-                            </div>
+                            <EnhancedFileAttachment
+                              key={file.id}
+                              file={file}
+                              onImageClick={setSelectedImage}
+                            />
                           ))}
                         </div>
                       </div>
@@ -1929,6 +2077,17 @@ export default function Comunidad() {
                         <MessageCircle className="h-4 w-4" />
                         <span>{post.replies_count || 0}</span>
                       </Button>
+                      {(post.author_id === user?.id || isTeacherOrAdmin) && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeletePost(post)}
+                          className="gap-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Eliminar
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
