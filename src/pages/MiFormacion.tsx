@@ -204,5 +204,3 @@ export default function MiFormacion() {
     </div>
   );
 }
-
-

@@ -63,27 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
-    let initTimeout: NodeJS.Timeout
 
     const initializeAuth = async () => {
       try {
         console.log('🔄 Inicializando autenticación...')
         
-        // ✅ Timeout de seguridad: si la inicialización toma más de 30 segundos, hay un problema
-        initTimeout = setTimeout(() => {
-          if (!isInitialized.current) {
-            console.error('🚨 TIMEOUT: Inicialización tomó demasiado tiempo. Limpiando...')
-            localStorage.clear()
-            sessionStorage.clear()
-            if (mounted) {
-              setUser(null)
-              setSession(null)
-              setProfile(null)
-              setLoading(false)
-              isInitialized.current = true
-            }
-          }
-        }, 30000)
+        // ✅ Timeout eliminado - dejar que la inicialización termine naturalmente
         
         // ✅ Verificar y limpiar tokens corruptos ANTES de getSession
         try {
@@ -176,12 +161,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (mounted) {
           setLoading(false)
           isInitialized.current = true
-          clearTimeout(initTimeout)
           console.log('✅ Inicialización completa')
         }
       } catch (error) {
         console.error('❌ Error en initializeAuth:', error)
-        clearTimeout(initTimeout)
         if (mounted) {
           setUser(null)
           setSession(null)
@@ -289,7 +272,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cleanup
     return () => {
       console.log('🧹 Limpiando AuthProvider')
-      clearTimeout(initTimeout)
       mounted = false
       subscription.unsubscribe()
     }
