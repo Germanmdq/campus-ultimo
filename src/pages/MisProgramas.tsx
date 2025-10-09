@@ -57,206 +57,74 @@ export default function MisProgramas() {
 
   const fetchEnrolledData = async () => {
     if (!user) return;
-
     try {
       setLoading(true);
-
-      // Obtener programas inscritos del usuario usando program_courses
-      const { data: enrollmentsData, error: enrollmentsError } = await supabase
+      
+      const { data: enrollmentsData } = await supabase
         .from('enrollments')
-        .select(`
-          status,
-          created_at,
-          programs (
-            id,
-            title,
-            summary,
-            slug,
-            poster_2x3_url,
-            wide_11x6_url
-          )
-        `)
+        .select('status, created_at, programs(id, title, summary, slug, poster_2x3_url, wide_11x6_url)')
         .eq('user_id', user.id)
         .eq('status', 'active');
 
-      if (enrollmentsError) throw enrollmentsError;
-
-      // Para cada programa, obtener sus cursos a través de program_courses
       const programsWithProgress = await Promise.all(
         (enrollmentsData || []).map(async (enrollment: any) => {
           const program = enrollment.programs;
           if (!program) return null;
 
-          // Obtener cursos del programa a través de program_courses
-          const { data: programCourses, error: coursesError } = await supabase
+          // UNA query para cursos Y progreso
+          const { data: coursesData } = await supabase
             .from('program_courses')
             .select(`
-              courses (
-                id,
-                title,
-                summary,
-                slug,
-                sort_order
-              )
+              courses!inner(id, title, summary, slug),
+              sort_order
             `)
             .eq('program_id', program.id)
             .order('sort_order');
 
-          if (coursesError) throw coursesError;
+          if (!coursesData?.length) return null;
 
-          const courses = programCourses?.map(pc => pc.courses).filter(Boolean) || [];
+          // UNA query para TODO el progreso de este usuario en estos cursos
+          const courseIds = coursesData.map(pc => pc.courses.id);
+          
+          const [lessonsResult, progressResult] = await Promise.all([
+            supabase.from('lessons').select('id, course_id').in('course_id', courseIds),
+            supabase.from('lesson_progress').select('lesson_id, completed')
+              .eq('user_id', user.id).eq('completed', true)
+          ]);
 
-          if (courses.length > 0) {
-            const coursesWithProgress = await Promise.all(
-              courses.map(async (course: any) => {
-                // Contar lecciones del curso
-                const { count: lessonsCount } = await supabase
-                  .from('lessons')
-                  .select('*', { count: 'exact', head: true })
-                  .eq('course_id', course.id);
+          const lessonsByCourse = (lessonsResult.data || []).reduce((acc, l) => {
+            acc[l.course_id] = (acc[l.course_id] || 0) + 1;
+            return acc;
+          }, {});
 
-                // Obtener lecciones del curso
-                const { data: lessonIds } = await supabase
-                  .from('lessons')
-                  .select('id')
-                  .eq('course_id', course.id);
+          const completedLessons = new Set((progressResult.data || []).map(p => p.lesson_id));
 
-                const lessonIdsList = lessonIds?.map(l => l.id) || [];
-                
-                // Contar lecciones completadas por el usuario
-                let completedCount = 0;
-                if (lessonIdsList.length > 0) {
-                  const { count } = await supabase
-                    .from('lesson_progress')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('user_id', user.id)
-                    .eq('completed', true)
-                    .in('lesson_id', lessonIdsList);
-                  
-                  completedCount = count || 0;
-                }
-
-                const progressPercent = lessonsCount && lessonsCount > 0 
-                  ? Math.round((completedCount / lessonsCount) * 100)
-                  : 0;
-
-                return {
-                  ...course,
-                  lessons_count: lessonsCount || 0,
-                  progress_percent: progressPercent
-                };
-              })
-            );
-
+          const courses = coursesData.map(pc => {
+            const course = pc.courses;
+            const totalLessons = lessonsByCourse[course.id] || 0;
+            const completed = (lessonsResult.data || [])
+              .filter(l => l.course_id === course.id && completedLessons.has(l.id))
+              .length;
+            
             return {
-              ...program,
-              enrollment_status: enrollment.status,
-              enrolled_at: enrollment.created_at,
-              courses: coursesWithProgress
+              ...course,
+              lessons_count: totalLessons,
+              progress_percent: totalLessons > 0 ? Math.round((completed / totalLessons) * 100) : 0
             };
-          }
+          });
 
           return {
             ...program,
             enrollment_status: enrollment.status,
             enrolled_at: enrollment.created_at,
-            courses: []
+            courses
           };
         })
       );
 
-      // Obtener cursos individuales inscritos
-      const { data: courseEnrollmentsData, error: courseEnrollmentsError } = await supabase
-        .from('course_enrollments')
-        .select(`
-          status,
-          created_at,
-          courses (
-            id,
-            title,
-            summary,
-            slug,
-            poster_2x3_url,
-            wide_11x6_url
-          )
-        `)
-        .eq('user_id', user.id)
-        .eq('status', 'active');
-
-      if (courseEnrollmentsError) throw courseEnrollmentsError;
-
-      // Procesar cursos individuales
-      const individualCoursesWithProgress = await Promise.all(
-        (courseEnrollmentsData || []).map(async (enrollment: any) => {
-          const course = enrollment.courses;
-          if (!course) return null;
-
-          // Contar lecciones del curso
-          const { count: lessonsCount } = await supabase
-            .from('lessons')
-            .select('*', { count: 'exact', head: true })
-            .eq('course_id', course.id);
-
-          // Obtener lecciones del curso
-          const { data: lessonIds } = await supabase
-            .from('lessons')
-            .select('id')
-            .eq('course_id', course.id);
-
-          const lessonIdsList = lessonIds?.map(l => l.id) || [];
-          
-          // Contar lecciones completadas por el usuario
-          let completedCount = 0;
-          if (lessonIdsList.length > 0) {
-            const { count } = await supabase
-              .from('lesson_progress')
-              .select('*', { count: 'exact', head: true })
-              .eq('user_id', user.id)
-              .eq('completed', true)
-              .in('lesson_id', lessonIdsList);
-            
-            completedCount = count || 0;
-          }
-
-          const progressPercent = lessonsCount && lessonsCount > 0 
-            ? Math.round((completedCount / lessonsCount) * 100)
-            : 0;
-
-          const item = {
-            ...course,
-            enrollment_status: enrollment.status,
-            enrolled_at: enrollment.created_at,
-            lessons_count: lessonsCount || 0,
-            progress_percent: progressPercent,
-            type: 'individual' as const
-          };
-          return item;
-        })
-      );
-
-      // Ocultar cursos individuales incluidos en programas inscritos (bundle real via tabla program_courses)
-      const { data: activeEnrs } = await supabase
-        .from('enrollments')
-        .select('program_id')
-        .eq('user_id', user.id)
-        .eq('status', 'active');
-      const activeProgramIds = (activeEnrs || []).map((e: any) => e.program_id).filter(Boolean);
-
-      let bundledCourseIds = new Set<string>();
-      if (activeProgramIds.length > 0) {
-        const { data: pcRows } = await supabase
-          .from('program_courses')
-          .select('course_id')
-          .in('program_id', activeProgramIds);
-        (pcRows || []).forEach((row: any) => { if (row.course_id) bundledCourseIds.add(row.course_id); });
-      }
-
-      const filteredIndividual = (individualCoursesWithProgress || []).filter((c: any) => c && !bundledCourseIds.has(c.id));
-
-      setEnrolledPrograms(programsWithProgress.filter(Boolean) as EnrolledProgram[]);
-      setEnrolledCourses(filteredIndividual.filter(Boolean) as EnrolledCourse[]);
+      setEnrolledPrograms(programsWithProgress.filter(Boolean));
     } catch (error) {
-      console.error('Error fetching enrolled data:', error);
+      console.error('Error:', error);
     } finally {
       setLoading(false);
     }

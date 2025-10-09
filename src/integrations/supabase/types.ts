@@ -533,6 +533,7 @@ export type Database = {
       }
       lessons: {
         Row: {
+          approval_form_url: string | null
           assignment_instructions: string | null
           course_id: string
           created_at: string | null
@@ -550,6 +551,7 @@ export type Database = {
           video_url: string | null
         }
         Insert: {
+          approval_form_url?: string | null
           assignment_instructions?: string | null
           course_id: string
           created_at?: string | null
@@ -567,6 +569,7 @@ export type Database = {
           video_url?: string | null
         }
         Update: {
+          approval_form_url?: string | null
           assignment_instructions?: string | null
           course_id?: string
           created_at?: string | null

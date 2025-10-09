@@ -19,10 +19,8 @@ interface Lesson {
   duration_minutes?: number;
   has_assignment: boolean;
   requires_admin_approval: boolean;
-  courses?: { 
-    title: string;
-    programs?: { title: string };
-  };
+  has_materials: boolean;
+  course_id: string;
 }
 
 interface GroupedLesson {
@@ -64,18 +62,15 @@ export default function Lecciones() {
           title,
           description,
           slug,
+          video_url,
           duration_minutes,
           has_assignment,
+          has_materials,
           requires_admin_approval,
-          lesson_courses (
-            courses (
-              id,
-              title,
-              programs ( title )
-            )
-          )
+          course_id,
+          lesson_courses (courses(id, title, programs(title)))
         `)
-        .order('sort_order');
+        .order('sort_order'); // Ordenar lecciones globalmente
       if (error) throw error;
 
       const grouped: GroupedLesson[] = [];
@@ -93,7 +88,8 @@ export default function Lecciones() {
           duration_minutes: l.duration_minutes,
           has_assignment: l.has_assignment,
           requires_admin_approval: l.requires_admin_approval,
-          courses: { title: courseTitle, programs: { title: programTitle } }
+          has_materials: l.has_materials,
+          course_id: l.course_id,
         };
         let group = grouped.find(g => g.courseId === courseId);
         if (!group) {
@@ -205,104 +201,115 @@ export default function Lecciones() {
       </div>
 
       <div className="space-y-6">
-        {lessons.map((group) => (
-          <Card key={group.courseId}>
-            <CardHeader className="cursor-pointer" onClick={() => setExpanded(prev => ({ ...prev, [group.courseId]: !prev[group.courseId] }))}>
-              <CardTitle className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-accent" />
-                  <div>
-                    <div>{group.courseTitle}</div>
-                    <div className="text-sm text-muted-foreground font-normal">{group.programTitle}</div>
+        {/* Mostrar lecciones directamente, sin agrupar por curso */}
+        {lessons.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold">No hay lecciones</h3>
+              <p className="text-muted-foreground">Crea tu primera lección para empezar.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          lessons.map((group) => (
+            <Card key={group.courseId}>
+              <CardHeader className="cursor-pointer" onClick={() => setExpanded(prev => ({ ...prev, [group.courseId]: !prev[group.courseId] }))}>
+                <CardTitle className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-accent" />
+                    <div>
+                      <div>{group.courseTitle}</div>
+                      <div className="text-sm text-muted-foreground font-normal">{group.programTitle}</div>
+                    </div>
                   </div>
-                </div>
-                <div className="text-sm text-muted-foreground">{group.lessons.length} lección(es)</div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {expanded[group.courseId] && (
-                <div className="space-y-4">
-                  {group.lessons.map((lesson) => (
-                    <Card key={lesson.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-4">
-                          <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
-                            {lesson.has_assignment ? (
-                              <FileText className="h-6 w-6 text-accent" />
-                            ) : (
-                              <PlayCircle className="h-6 w-6 text-accent" />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-foreground mb-1">{lesson.title}</h3>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {lesson.description || 'Lección de geometría sagrada'}
-                            </p>
-                            <div className="flex items-center gap-4 mb-3">
-                              <Badge>Publicado</Badge>
-                              {lesson.requires_admin_approval && (
-                                <Badge variant="secondary">Requiere Aprobación</Badge>
-                              )}
-                              {lesson.has_assignment && (
-                                <Badge variant="outline">Con Tarea</Badge>
-                              )}
-                              {lesson.duration_minutes && (
-                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{lesson.duration_minutes} min</span>
-                                </div>
+                  <div className="text-sm text-muted-foreground">{group.lessons.length} lección(es)</div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {expanded[group.courseId] && (
+                  <div className="space-y-4">
+                    {group.lessons.map((lesson) => (
+                      <Card key={lesson.id}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-4">
+                            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
+                              {lesson.has_assignment ? (
+                                <FileText className="h-6 w-6 text-accent" />
+                              ) : (
+                                <PlayCircle className="h-6 w-6 text-accent" />
                               )}
                             </div>
-                            <div className="flex gap-2">
-                              {isTeacherOrAdmin ? (
-                                <>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    onClick={() => handleEditLesson(lesson)}
-                                  >
-                                    Editar
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline"
-                                    onClick={() => handleShowMaterials(lesson)}
-                                  >
-                                    Materiales
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="destructive"
-                                    onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
-                                  >
-                                    Eliminar
-                                  </Button>
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-foreground mb-1">{lesson.title}</h3>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {lesson.description || 'Lección de geometría sagrada'}
+                              </p>
+                              <div className="flex items-center gap-4 mb-3">
+                                <Badge>Publicado</Badge>
+                                {lesson.requires_admin_approval && (
+                                  <Badge variant="secondary">Requiere Aprobación</Badge>
+                                )}
+                                {lesson.has_assignment && (
+                                  <Badge variant="outline">Con Tarea</Badge>
+                                )}
+                                {lesson.duration_minutes && (
+                                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <Clock className="h-3 w-3" />
+                                    <span>{lesson.duration_minutes} min</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                {isTeacherOrAdmin ? (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => handleEditLesson(lesson)}
+                                    >
+                                      Editar
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => handleShowMaterials(lesson)}
+                                    >
+                                      Materiales
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="destructive"
+                                      onClick={() => handleDeleteLesson(lesson.id, lesson.title)}
+                                    >
+                                      Eliminar
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      onClick={() => handleViewLesson(lesson.slug, lesson.title)}
+                                    >
+                                      Ver
+                                    </Button>
+                                  </>
+                                ) : (
                                   <Button 
                                     size="sm" 
                                     onClick={() => handleViewLesson(lesson.slug, lesson.title)}
                                   >
-                                    Ver
+                                    Ver Lección
                                   </Button>
-                                </>
-                              ) : (
-                                <Button 
-                                  size="sm" 
-                                  onClick={() => handleViewLesson(lesson.slug, lesson.title)}
-                                >
-                                  Ver Lección
-                                </Button>
-                              )}
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))
+        )}
 
         {/* Crear nueva lección - Inline para docentes/admin */}
         {isTeacherOrAdmin && (
@@ -339,7 +346,7 @@ export default function Lecciones() {
               <span className="text-sm font-medium">Con Tareas</span>
             </div>
             <p className="text-2xl font-bold mt-2">
-              {lessons.reduce((acc, group) => 
+              {lessons.reduce((acc, group) =>
                 acc + group.lessons.filter(l => l.has_assignment).length, 0
               )}
             </p>
@@ -364,7 +371,9 @@ export default function Lecciones() {
               <BookOpen className="h-4 w-4 text-accent" />
               <span className="text-sm font-medium">Cursos</span>
             </div>
-            <p className="text-2xl font-bold mt-2">{lessons.length}</p>
+            <p className="text-2xl font-bold mt-2">
+              {lessons.length}
+            </p>
             <p className="text-xs text-muted-foreground">Con lecciones</p>
           </CardContent>
         </Card>

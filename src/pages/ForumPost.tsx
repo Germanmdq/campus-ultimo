@@ -465,7 +465,7 @@ export default function ForumPost() {
               rows={3}
               value={newReply}
               onChange={(e) => setNewReply(e.target.value)}
-              className="text-foreground placeholder:text-muted-foreground"
+              className="min-h-[80px] text-foreground placeholder:text-muted-foreground"
             />
             
             {/* Input de archivos */}

@@ -25,13 +25,15 @@ interface LessonMaterialsDialogProps {
   onOpenChange: (open: boolean) => void;
   lessonId: string;
   lessonTitle: string;
+  onClose?: () => void;
 }
 
 export function LessonMaterialsDialog({ 
   open, 
   onOpenChange, 
   lessonId, 
-  lessonTitle 
+  lessonTitle,
+  onClose
 }: LessonMaterialsDialogProps) {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [newMaterial, setNewMaterial] = useState({
@@ -341,7 +343,7 @@ export function LessonMaterialsDialog({
         </div>
 
         <div className="pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full">
+          <Button variant="outline" onClick={onClose || (() => onOpenChange(false))} className="w-full">
             Cerrar
           </Button>
         </div>

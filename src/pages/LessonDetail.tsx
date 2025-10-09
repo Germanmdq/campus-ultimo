@@ -3,10 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { ArrowLeft, BookOpen, FileText, Link as LinkIcon, Users, Settings } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, BookOpen, FileText, Link, Users, Settings } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,6 +22,8 @@ interface Lesson {
   duration_minutes: number;
   has_assignment: boolean;
   has_materials: boolean;
+  approval_form_url?: string | null;
+  submission_url?: string | null;
   course_id: string;
   course?: {
     title: string;
@@ -98,18 +99,19 @@ export default function LessonDetail() {
     // Fetch materials ALWAYS - not depending on has_materials flag
     const { data: materialsData, error: materialsError } = await supabase
       .from('lesson_materials')
-      .select('id, title, type, file_url, url, sort_order')
+      .select('*')
       .eq('lesson_id', lessonData.id)
       .order('sort_order');
     
     if (materialsError) {
       console.error('Error fetching materials:', materialsError);
     }
-
+    
+    // ✅ MAPEAR material_type a type para que coincida con la interface Material
     const mappedMaterials = (materialsData || []).map(m => ({
       id: m.id,
       title: m.title,
-      type: m.type as 'file' | 'link',
+      type: m.material_type as 'file' | 'link',
       file_url: m.file_url,
       url: m.url
     }));
@@ -294,49 +296,45 @@ export default function LessonDetail() {
             </Card>
           )}
 
-          {/* Materials section - SOLO SI HAY MATERIALES */}
-          {materials.length > 0 && (
+          {/* Materials section - SIEMPRE VISIBLE */}
+          {(
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
                   Materiales
-                  {isTeacherOrAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowMaterials(true)}
-                      className="ml-auto"
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Gestionar Materiales
-                    </Button>
-                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {materials.map(material => (
-                  <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {material.type === 'file' ? <FileText className="h-4 w-4" /> : <LinkIcon className="h-4 w-4" />}
-                      <div>
-                        <h4 className="font-medium">{material.title}</h4>
-                        <Badge variant="secondary" className="text-xs">
-                          {material.type === 'file' ? 'Archivo' : 'Enlace'}
-                        </Badge>
+                {materials.length > 0 ? (
+                  materials.map(material => (
+                    <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        {material.type === 'file' ? <FileText className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                        <div>
+                          <h4 className="font-medium">{material.title}</h4>
+                          <Badge variant="secondary" className="text-xs">
+                            {material.type === 'file' ? 'Archivo' : 'Enlace'}
+                          </Badge>
+                        </div>
                       </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const url = material.type === 'file' ? material.file_url : material.url;
+                          if (url) window.open(url, '_blank');
+                        }}
+                      >
+                        {material.type === 'file' ? 'Descargar' : 'Abrir'}
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        const url = material.type === 'file' ? material.file_url : material.url;
-                        if (url) window.open(url, '_blank');
-                      }}
-                    >
-                      {material.type === 'file' ? 'Descargar' : 'Abrir'}
-                    </Button>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No hay materiales disponibles</p>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
           )}
@@ -360,43 +358,26 @@ export default function LessonDetail() {
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">Tiene entregable</span>
                   </div>
-                  {profile?.role === 'student' && (
-                    <div className="space-y-3 p-3 border rounded-md">
+                  {(profile?.role === 'student' || profile?.role === 'admin') && (
+                    <div className="space-y-2 p-3 border rounded-md">
                       {alreadySubmitted ? (
                         <div className="text-center py-4">
                           <div className="h-12 w-12 text-green-500 mx-auto mb-2">✓</div>
                           <p className="text-green-600 font-medium">Trabajo enviado</p>
-                          <p className="text-sm text-muted-foreground">
-                            Tu trabajo fue enviado para revisión
-                          </p>
                         </div>
                       ) : (
-                        <>
-                          <div>
-                            <Label htmlFor="dropboxLink">Enlace de Dropbox</Label>
-                            <Input
-                              id="dropboxLink"
-                              value={dropboxLink}
-                              onChange={(e) => setDropboxLink(e.target.value)}
-                              placeholder="Pega aquí el enlace de Dropbox"
-                            />
-                          </div>
-                          
-                          <div>
-                            <Label htmlFor="textAnswer">Comentarios (opcional)</Label>
-                            <Textarea
-                              id="textAnswer"
-                              value={textAnswer}
-                              onChange={(e) => setTextAnswer(e.target.value)}
-                              placeholder="Agrega comentarios sobre tu trabajo..."
-                              rows={3}
-                            />
-                          </div>
-                          
-                          <Button onClick={handleSubmitAssignment} disabled={submitting || !dropboxLink.trim()} className="w-full">
-                            {submitting ? 'Enviando...' : 'Enviar Trabajo'}
-                          </Button>
-                        </>
+                        <Button
+                          className="w-full"
+                          onClick={() => {
+                            if (lesson.approval_form_url && lesson.approval_form_url !== 't') {
+                              window.open(lesson.approval_form_url, '_blank', 'noopener,noreferrer');
+                            } else {
+                              alert('URL de trabajo práctico no configurada. Contacta al administrador.');
+                            }
+                          }}
+                        >
+                          Enviar trabajo práctico
+                        </Button>
                       )}
                     </div>
                   )}
