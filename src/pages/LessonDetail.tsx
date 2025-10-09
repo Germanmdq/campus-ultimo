@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, BookOpen, FileText, Link, Users, Settings } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, BookOpen, FileText, Link as LinkIcon, Users, Settings } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '@/hooks/useAuth';
@@ -97,19 +98,18 @@ export default function LessonDetail() {
     // Fetch materials ALWAYS - not depending on has_materials flag
     const { data: materialsData, error: materialsError } = await supabase
       .from('lesson_materials')
-      .select('*')
+      .select('id, title, type, file_url, url, sort_order')
       .eq('lesson_id', lessonData.id)
       .order('sort_order');
     
     if (materialsError) {
       console.error('Error fetching materials:', materialsError);
     }
-    
-    // ✅ MAPEAR material_type a type para que coincida con la interface Material
+
     const mappedMaterials = (materialsData || []).map(m => ({
       id: m.id,
       title: m.title,
-      type: m.material_type as 'file' | 'link',  // ✅ Mapear material_type -> type
+      type: m.type as 'file' | 'link',
       file_url: m.file_url,
       url: m.url
     }));
@@ -318,7 +318,7 @@ export default function LessonDetail() {
                 {materials.map(material => (
                   <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
-                      {material.type === 'file' ? <FileText className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                      {material.type === 'file' ? <FileText className="h-4 w-4" /> : <LinkIcon className="h-4 w-4" />}
                       <div>
                         <h4 className="font-medium">{material.title}</h4>
                         <Badge variant="secondary" className="text-xs">
@@ -361,45 +361,43 @@ export default function LessonDetail() {
                     <span className="text-sm">Tiene entregable</span>
                   </div>
                   {profile?.role === 'student' && (
-                    <div className="space-y-2 p-3 border rounded-md">
-                      <Button
-                        className="w-full"
-                        onClick={async () => {
-                          try {
-                            // Crear notificación en assignments
-                            const { error } = await supabase
-                              .from('assignments')
-                              .insert({
-                                user_id: profile.id,
-                                lesson_id: lesson.id,
-                                status: 'submitted',
-                                file_url: null,
-                                text_answer: null,
-                                max_grade: 100
-                              });
-                            
-                            if (error) throw error;
-                            
-                            // Abrir Dropbox
-                            window.open('https://www.dropbox.com/request/LlaRtF8KefIoXHjdg0Uo', '_blank');
-                            
-                            // Mostrar toast de éxito
-                            toast({
-                              title: "Trabajo enviado",
-                              description: "Se notificó al profesor. Sube tu archivo en Dropbox."
-                            });
-                            
-                          } catch (error: any) {
-                            toast({
-                              title: "Error",
-                              description: error.message,
-                              variant: "destructive"
-                            });
-                          }
-                        }}
-                      >
-                        Enviar trabajo práctico (Dropbox)
-                      </Button>
+                    <div className="space-y-3 p-3 border rounded-md">
+                      {alreadySubmitted ? (
+                        <div className="text-center py-4">
+                          <div className="h-12 w-12 text-green-500 mx-auto mb-2">✓</div>
+                          <p className="text-green-600 font-medium">Trabajo enviado</p>
+                          <p className="text-sm text-muted-foreground">
+                            Tu trabajo fue enviado para revisión
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <Label htmlFor="dropboxLink">Enlace de Dropbox</Label>
+                            <Input
+                              id="dropboxLink"
+                              value={dropboxLink}
+                              onChange={(e) => setDropboxLink(e.target.value)}
+                              placeholder="Pega aquí el enlace de Dropbox"
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor="textAnswer">Comentarios (opcional)</Label>
+                            <Textarea
+                              id="textAnswer"
+                              value={textAnswer}
+                              onChange={(e) => setTextAnswer(e.target.value)}
+                              placeholder="Agrega comentarios sobre tu trabajo..."
+                              rows={3}
+                            />
+                          </div>
+                          
+                          <Button onClick={handleSubmitAssignment} disabled={submitting || !dropboxLink.trim()} className="w-full">
+                            {submitting ? 'Enviando...' : 'Enviar Trabajo'}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
