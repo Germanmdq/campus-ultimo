@@ -52,19 +52,13 @@ export function AddCoursesToProgramDialog({
 
       const existingCourseIds = existingCourses?.map(pc => pc.course_id) || [];
 
-<<<<<<< HEAD
-=======
       // 📚 PASO 2: Obtener TODOS los cursos EXCEPTO los que ya están en el programa
->>>>>>> 92ce460ef79256e00ceb225b9140e682ae38066b
       let query = supabase
         .from('courses')
         .select('id, title, summary, published_at')
         .order('title');
 
-<<<<<<< HEAD
-=======
       // ⚡ FILTRO: Solo aplicar si hay cursos existentes
->>>>>>> 92ce460ef79256e00ceb225b9140e682ae38066b
       if (existingCourseIds.length > 0) {
         query = query.not('id', 'in', `(${existingCourseIds.join(',')})`);
       }
