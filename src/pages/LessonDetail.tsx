@@ -23,6 +23,7 @@ interface Lesson {
   has_assignment: boolean;
   has_materials: boolean;
   approval_form_url?: string | null;
+  submission_url?: string | null;
   course_id: string;
   course?: {
     title: string;
@@ -110,7 +111,7 @@ export default function LessonDetail() {
     const mappedMaterials = (materialsData || []).map(m => ({
       id: m.id,
       title: m.title,
-      type: m.type as 'file' | 'link',
+      type: m.material_type as 'file' | 'link',
       file_url: m.file_url,
       url: m.url
     }));
@@ -295,49 +296,45 @@ export default function LessonDetail() {
             </Card>
           )}
 
-          {/* Materials section - SOLO SI HAY MATERIALES */}
-          {materials.length > 0 && (
+          {/* Materials section - SIEMPRE VISIBLE */}
+          {(
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
                   Materiales
-                  {isTeacherOrAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowMaterials(true)}
-                      className="ml-auto"
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Gestionar Materiales
-                    </Button>
-                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {materials.map(material => (
-                  <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      {material.type === 'file' ? <FileText className="h-4 w-4" /> : <Link className="h-4 w-4" />}
-                      <div>
-                        <h4 className="font-medium">{material.title}</h4>
-                        <Badge variant="secondary" className="text-xs">
-                          {material.type === 'file' ? 'Archivo' : 'Enlace'}
-                        </Badge>
+                {materials.length > 0 ? (
+                  materials.map(material => (
+                    <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        {material.type === 'file' ? <FileText className="h-4 w-4" /> : <Link className="h-4 w-4" />}
+                        <div>
+                          <h4 className="font-medium">{material.title}</h4>
+                          <Badge variant="secondary" className="text-xs">
+                            {material.type === 'file' ? 'Archivo' : 'Enlace'}
+                          </Badge>
+                        </div>
                       </div>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const url = material.type === 'file' ? material.file_url : material.url;
+                          if (url) window.open(url, '_blank');
+                        }}
+                      >
+                        {material.type === 'file' ? 'Descargar' : 'Abrir'}
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        const url = material.type === 'file' ? material.file_url : material.url;
-                        if (url) window.open(url, '_blank');
-                      }}
-                    >
-                      {material.type === 'file' ? 'Descargar' : 'Abrir'}
-                    </Button>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No hay materiales disponibles</p>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
           )}
@@ -361,12 +358,23 @@ export default function LessonDetail() {
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">Tiene entregable</span>
                   </div>
-                  {profile?.role === 'student' && (
+                  {(profile?.role === 'student' || profile?.role === 'admin') && (
                     <div className="space-y-2 p-3 border rounded-md">
-                      {lesson.approval_form_url && (
+                      {alreadySubmitted ? (
+                        <div className="text-center py-4">
+                          <div className="h-12 w-12 text-green-500 mx-auto mb-2">✓</div>
+                          <p className="text-green-600 font-medium">Trabajo enviado</p>
+                        </div>
+                      ) : (
                         <Button
                           className="w-full"
-                          onClick={() => window.open(lesson.approval_form_url!, '_blank', 'noopener,noreferrer')}
+                          onClick={() => {
+                            if (lesson.approval_form_url && lesson.approval_form_url !== 't') {
+                              window.open(lesson.approval_form_url, '_blank', 'noopener,noreferrer');
+                            } else {
+                              alert('URL de trabajo práctico no configurada. Contacta al administrador.');
+                            }
+                          }}
                         >
                           Enviar trabajo práctico
                         </Button>

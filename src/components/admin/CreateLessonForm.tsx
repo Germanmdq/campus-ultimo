@@ -43,6 +43,7 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
   const [assignmentInstructions, setAssignmentInstructions] = useState('');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [approvalFormUrl, setApprovalFormUrl] = useState('');
+  const [submissionUrl, setSubmissionUrl] = useState('');
   const [prerequisiteId, setPrerequisiteId] = useState('none');
   const [hasMaterials, setHasMaterials] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -371,8 +372,11 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
                 <Textarea id="assignmentInstructions" value={assignmentInstructions} onChange={(e) => setAssignmentInstructions(e.target.value)} placeholder="Instrucciones para el estudiante..." rows={3} disabled={loading} />
               </div>
               <div>
-                <Label htmlFor="approvalFormUrl">URL de Entrega (Dropbox, etc.)</Label>
-                <Input id="approvalFormUrl" value={approvalFormUrl} onChange={(e) => setApprovalFormUrl(e.target.value)} placeholder="https://www.dropbox.com/request/..." disabled={loading} />
+                <Label htmlFor="approvalFormUrl">URL del Trabajo Práctico</Label>
+                <Input id="approvalFormUrl" value={approvalFormUrl} onChange={(e) => setApprovalFormUrl(e.target.value)} placeholder="https://docs.google.com/forms/..." disabled={loading} />
+                <p className="text-xs text-muted-foreground mt-1">
+                  URL donde el estudiante completa y entrega el trabajo práctico
+                </p>
               </div>
             </>
           )}
