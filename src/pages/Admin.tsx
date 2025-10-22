@@ -1,20 +1,33 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Users, BookOpen, GraduationCap, Settings, CheckCircle, Clock, Star, TrendingUp, Loader2, Activity } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Users, BookOpen, GraduationCap, Loader2, Activity, ChevronDown, ChevronUp, TrendingUp, Clock, UserCheck, UserMinus, Eye } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CreateProgramForm } from '@/components/admin/CreateProgramForm';
 import { CreateCourseForm } from '@/components/admin/CreateCourseForm';
-import { UserProfileDialog } from '@/components/admin/UserProfileDialog';
 import { AddCoursesToProgramDialog } from '@/components/admin/AddCoursesToProgramDialog';
 import { ProgramSelectorDialog } from '@/components/admin/ProgramSelectorDialog';
 import { useStats } from '@/hooks/useStats';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+interface ActivityData {
+  programs: Array<{ id: string; title: string; created_at: string; courses_count: number }>;
+  totalUsers: number;
+  newUsers30Days: Array<{ id: string; full_name: string; avatar_url: string | null; created_at: string; email: string }>;
+  inactiveUsers17Days: Array<{ id: string; full_name: string; avatar_url: string | null; last_activity: string | null; email: string }>;
+  frequentUsers: Array<{ id: string; full_name: string; avatar_url: string | null; activity_count: number; email: string }>;
+  formadores: Array<{ id: string; full_name: string; avatar_url: string | null; created_at: string; email: string }>;
+  voluntarios: Array<{ id: string; full_name: string; avatar_url: string | null; created_at: string; email: string }>;
+  topPrograms: Array<{ id: string; title: string; view_minutes: number }>;
+  topCourses: Array<{ id: string; title: string; view_minutes: number }>;
+}
 
 export default function Admin() {
   const { profile, loading: authLoading } = useAuth();
@@ -25,73 +38,33 @@ export default function Admin() {
   const [selectedProgramId, setSelectedProgramId] = useState<string>('');
   const [showProgramSelector, setShowProgramSelector] = useState(false);
   const { stats, loading, refetch } = useStats();
-
-  // Actividad/Estadísticas avanzadas
   const [activityLoading, setActivityLoading] = useState(true);
-  const [activity, setActivity] = useState({
-    programs: 0,
-    courses: 0,
-    usersInPrograms: 0,
-    usersInIndividual: 0,
-    newWeek: 0,
-    newMonth: 0,
-    newYear: 0,
-    active30: 0,
-    active7: 0,
-    totalStudents: 0,
-    totalActiveStudentsMonth: 0,
-    totalTeachers: 0,
-    totalVolunteers: 0,
-    topCourses: [] as Array<{ courseId: string; title: string; minutes: number }>,
-    topCourseTitle: '' as string,
-    topCourseMinutes: 0 as number,
-    topProgramTitle: '' as string,
-    topProgramMinutes: 0 as number,
-    activeUsersList: [] as Array<{ id: string; full_name?: string; name?: string }>,
-    activeUsers20List: [] as Array<{ id: string; full_name?: string; name?: string }>,
+  const [activity, setActivity] = useState<ActivityData>({
+    programs: [],
+    totalUsers: 0,
+    newUsers30Days: [],
+    inactiveUsers17Days: [],
+    frequentUsers: [],
+    formadores: [],
+    voluntarios: [],
+    topPrograms: [],
+    topCourses: [],
   });
-  // Rango de fechas (actividad)
-  const todayStr = new Date().toISOString().slice(0,10);
-  const thirtyDaysAgoStr = new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
-  const [rangeStart, setRangeStart] = useState(thirtyDaysAgoStr);
-  const [rangeEnd, setRangeEnd] = useState(todayStr);
 
-  // Dialog Perfil desde chips de activos
-  const [showUserProfile, setShowUserProfile] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [showActiveUsers, setShowActiveUsers] = useState(false);
-  const [activeUsersLoading, setActiveUsersLoading] = useState(false);
-  const [activeUsersDetails, setActiveUsersDetails] = useState<Array<{ id: string; name: string; full_name: string; email: string; role: string; programs: string[]; courses: string[] }>>([]);
-  const [activeUsersSearch, setActiveUsersSearch] = useState('');
-  const [activityDialogTitle, setActivityDialogTitle] = useState('Usuarios');
-  const [activeUsersRoleFilter, setActiveUsersRoleFilter] = useState<'todos' | 'student' | 'teacher' | 'admin' | 'voluntario'>('todos');
+  // Estados para cards expandibles
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
 
-  // Estados para el diálogo de actividad
-  const [activityDialogOpen, setActivityDialogOpen] = useState(false);
-  const [activityDialogType, setActivityDialogType] = useState('');
-  const [activityDetailData, setActivityDetailData] = useState<any[]>([]);
+  const toggleCard = (cardId: string) => {
+    setExpandedCards(prev => ({ ...prev, [cardId]: !prev[cardId] }));
+  };
 
-  const exportActiveUsersCsv = () => {
-    const headers = ['nombre','email','programas','cursos'];
-    const search = activeUsersSearch.trim().toLowerCase();
-    const rows = activeUsersDetails
-      .filter(u => !search || (u.full_name?.toLowerCase().includes(search) || u.email?.toLowerCase().includes(search) || u.programs.join(', ').toLowerCase().includes(search) || u.courses.join(', ').toLowerCase().includes(search)))
-      .map(u => ({
-        nombre: u.full_name || '',
-        email: u.email || '',
-        programas: u.programs.join(' | '),
-        cursos: u.courses.join(' | '),
-      }));
-    const lines = [headers.join(',')].concat(
-      rows.map(r => headers.map(h => `"${String((r as any)[h] ?? '').replace(/"/g,'""')}"`).join(','))
-    );
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const date = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-    a.href = url; a.download = `usuarios-activos-${date}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   // Guard: solo admin o formador pueden acceder
@@ -102,335 +75,183 @@ export default function Admin() {
       </div>
     );
   }
+
   const isAllowed = profile && (profile.role === 'admin' || profile.role === 'formador');
   if (!isAllowed) {
     return <Navigate to="/mi-formacion" replace />;
   }
 
-  const openActivityDialog = (type: string, title: string) => {
-    setActivityDialogType(type);
-      setActivityDialogTitle(title);
-
-    // Mapear el tipo a los datos correctos
-    let detailData: any[] = [];
-    
-    switch(type) {
-      case 'programs':
-        // Necesitas cargar la lista de programas
-        supabase.from('programs').select('id, title, created_at').then(({ data }) => {
-          setActivityDetailData(data || []);
-          setActivityDialogOpen(true);
-        });
-        return;
-        
-      case 'courses':
-        supabase.from('courses').select('id, title, created_at').then(({ data }) => {
-          setActivityDetailData(data || []);
-          setActivityDialogOpen(true);
-        });
-        return;
-        
-      case 'usersInPrograms':
-        supabase
-          .from('enrollments')
-          .select('user_id')
-          .eq('status', 'active')
-          .then(async ({ data }) => {
-            const uniqueUserIds = Array.from(new Set((data || []).map(e => e.user_id)));
-            const { data: usersData } = await supabase
-              .from('profiles')
-              .select('id, full_name, email, created_at')
-              .in('id', uniqueUserIds);
-            setActivityDetailData(usersData || []);
-            setActivityDialogOpen(true);
-          });
-        return;
-        
-      case 'usersInIndividual':
-        // Cargar usuarios sin filtro de rol
-        supabase.from('profiles')
-          .select('id, full_name, email, created_at')
-          .then(({ data }) => {
-            setActivityDetailData(data || []);
-            setActivityDialogOpen(true);
-          });
-        return;
-        
-      case 'usersInIndividualCourses':
-        supabase
-          .from('course_enrollments')
-          .select('user_id')
-          .eq('status', 'active')
-          .then(async ({ data }) => {
-            const uniqueUserIds = Array.from(new Set((data || []).map(e => e.user_id)));
-            const { data: usersData } = await supabase
-              .from('profiles')
-              .select('id, full_name, email, created_at')
-              .in('id', uniqueUserIds);
-            setActivityDetailData(usersData || []);
-            setActivityDialogOpen(true);
-          });
-        return;
-        
-      case 'totalStudents':
-        supabase.from('profiles')
-          .select('id, full_name, email, created_at')
-          .eq('role', 'student')
-          .then(({ data }) => {
-            setActivityDetailData(data || []);
-            setActivityDialogOpen(true);
-          });
-        return;
-        
-      case 'totalTeachers':
-        supabase.from('profiles')
-          .select('id, full_name, email, created_at')
-          .eq('role', 'teacher')
-          .then(({ data }) => {
-            setActivityDetailData(data || []);
-            setActivityDialogOpen(true);
-          });
-        return;
-        
-      case 'totalVolunteers':
-        supabase.from('profiles')
-          .select('id, full_name, email, created_at')
-          .eq('role', 'voluntario' as any)
-          .then(({ data }) => {
-            setActivityDetailData(data || []);
-            setActivityDialogOpen(true);
-          });
-        return;
-        
-      case 'newWeek':
-      case 'newMonth':
-      case 'newYear':
-      case 'active30':
-      case 'active7':
-        // Usar la lista que ya tienes en activity.activeUsersList
-        setActivityDetailData(activity.activeUsersList || []);
-        setActivityDialogOpen(true);
-        return;
-        
-      default:
-        setActivityDetailData([]);
-        setActivityDialogOpen(true);
-    }
-  };
-
   useEffect(() => {
-    fetchActivity(rangeStart, rangeEnd);
+    fetchActivityData();
   }, []);
 
-  const fetchActivity = async (start?: string, end?: string) => {
+  const fetchActivityData = async () => {
     try {
       setActivityLoading(true);
-      
-      // ❌ COMENTADO - Edge Function no existe o devuelve HTML
-      /*
-      const params = new URLSearchParams();
-      if (start) params.set('start', start);
-      if (end) params.set('end', end);
-      try {
-        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/activity?${params.toString()}`, {
-          headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        });
-        
-        if (!resp.ok) {
-          throw new Error(`HTTP error! status: ${resp.status}`);
-        }
-        
-        const contentType = resp.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('La respuesta no es JSON');
-        }
-        
-        const json = await resp.json();
-        if (json?.success && json?.data) {
-          setActivity(prev => ({ ...prev, ...json.data }));
-          return;
-        }
-      } catch (e) {
-        console.warn('Edge activity fallback:', e);
-      }
-      */
-      
-      // ✅ Ir directo al código de fallback local
-      // Programs count
-      const { count: progCount } = await supabase.from('programs').select('*', { count: 'exact', head: true });
-      const { count: courseCount } = await supabase.from('courses').select('*', { count: 'exact', head: true });
 
-      // Distinct users in programs - with RLS error handling
-      let usersInPrograms = 0;
-      try {
-        const { data: enrs } = await supabase.from('enrollments').select('user_id');
-        usersInPrograms = new Set((enrs || []).map((e: any) => e.user_id)).size;
-      } catch (error) {
-        console.warn('Error fetching enrollments (RLS issue):', error);
-      }
+      // 1. Programas con conteo de cursos
+      const { data: programsData } = await supabase
+        .from('programs')
+        .select('id, title, created_at')
+        .order('created_at', { ascending: false });
 
-      // Distinct users in individual courses - Only count if courses exist
-      let usersInIndividual = 0;
-      if (courseCount && courseCount > 0) {
-        try {
-          const { data: cenrs } = await supabase.from('course_enrollments').select('user_id');
-          usersInIndividual = new Set((cenrs || []).map((e: any) => e.user_id)).size;
-        } catch (error) {
-          console.warn('Error fetching individual course enrollments (RLS issue):', error);
-        }
-      }
+      const programsWithCourses = await Promise.all(
+        (programsData || []).map(async (prog) => {
+          const { count } = await supabase
+            .from('program_courses')
+            .select('*', { count: 'exact', head: true })
+            .eq('program_id', prog.id);
+          return { ...prog, courses_count: count || 0 };
+        })
+      );
 
-      // New users by period from profiles.created_at
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
+      // 2. Total usuarios (solo estudiantes)
+      const { count: totalStudents } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'student');
 
-      const { data: pWeek } = await supabase.from('profiles').select('id, created_at').gte('created_at', weekAgo);
-      const { data: pMonth } = await supabase.from('profiles').select('id, created_at').gte('created_at', monthAgo);
-      const { data: pYear } = await supabase.from('profiles').select('id, created_at').gte('created_at', yearAgo);
+      // 3. Nuevos usuarios últimos 30 días
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: newUsers } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, created_at, email')
+        .eq('role', 'student')
+        .gte('created_at', thirtyDaysAgo)
+        .order('created_at', { ascending: false });
 
-      // Totales por rol
-      const { count: totalStudents } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
-      const { count: totalTeachers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
-      const { count: totalVolunteers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'voluntario' as any);
+      // 4. Usuarios sin conexión 17 días (sin progreso)
+      const seventeenDaysAgo = new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: allStudents } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, email')
+        .eq('role', 'student');
 
-      // Top courses by watched_minutes (lesson_progress joined to lessons->courses)
-      // limitar por rango si está definido
-      let lpSelect = supabase
+      // Obtener última actividad de cada estudiante
+      const inactiveUsers = await Promise.all(
+        (allStudents || []).map(async (student) => {
+          const { data: progress } = await supabase
+            .from('lesson_progress')
+            .select('updated_at')
+            .eq('user_id', student.id)
+            .order('updated_at', { ascending: false })
+            .limit(1);
+
+          const lastActivity = progress?.[0]?.updated_at || null;
+
+          // Si no tiene actividad O la última actividad fue hace más de 17 días
+          if (!lastActivity || new Date(lastActivity) < new Date(seventeenDaysAgo)) {
+            return { ...student, last_activity: lastActivity };
+          }
+          return null;
+        })
+      );
+
+      const filteredInactive = inactiveUsers.filter(u => u !== null) as any[];
+
+      // 5. Usuarios frecuentes (activos al menos 2 días en últimos 15 días)
+      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentProgress } = await supabase
         .from('lesson_progress')
-        .select('watched_seconds, updated_at, lessons!inner(course_id, courses!inner(title))')
-        .limit(10000) as any;
-      if (start && end) {
-        const startIso = new Date(start).toISOString();
-        const endIso = new Date(new Date(end).getTime() + 24*60*60*1000).toISOString();
-        lpSelect = lpSelect.gte('updated_at', startIso).lt('updated_at', endIso);
-      }
-      const { data: lps } = await lpSelect;
-      const minutesByCourse: Record<string, { title: string; minutes: number }> = {};
-      (lps || []).forEach((row: any) => {
-        const cid = row.lessons?.course_id;
-        const title = row.lessons?.courses?.title || 'Curso';
-        if (!cid) return;
-        if (!minutesByCourse[cid]) minutesByCourse[cid] = { title, minutes: 0 };
-        minutesByCourse[cid].minutes += Math.floor((row.watched_seconds || 0) / 60);
+        .select('user_id, updated_at')
+        .gte('updated_at', fifteenDaysAgo);
+
+      // Agrupar por usuario y contar días únicos de actividad
+      const activityByUser: Record<string, Set<string>> = {};
+      (recentProgress || []).forEach(prog => {
+        const userId = prog.user_id;
+        const day = new Date(prog.updated_at).toISOString().split('T')[0];
+        if (!activityByUser[userId]) {
+          activityByUser[userId] = new Set();
+        }
+        activityByUser[userId].add(day);
       });
-      const topCourses = Object.entries(minutesByCourse)
-        .map(([courseId, v]) => ({ courseId, title: v.title, minutes: v.minutes }))
-        .sort((a, b) => b.minutes - a.minutes)
+
+      // Filtrar usuarios con 2 o más días de actividad
+      const frequentUserIds = Object.entries(activityByUser)
+        .filter(([_, days]) => days.size >= 2)
+        .map(([userId]) => userId);
+
+      let frequentUsersData: any[] = [];
+      if (frequentUserIds.length > 0) {
+        const { data: frequentUsers } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, email')
+          .in('id', frequentUserIds);
+
+        frequentUsersData = (frequentUsers || []).map(user => ({
+          ...user,
+          activity_count: activityByUser[user.id].size,
+        })).sort((a, b) => b.activity_count - a.activity_count);
+      }
+
+      // 6. Formadores
+      const { data: formadores } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, created_at, email')
+        .eq('role', 'formador')
+        .order('created_at', { ascending: false });
+
+      // 7. Voluntarios
+      const { data: voluntarios } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, created_at, email')
+        .eq('role', 'voluntario' as any)
+        .order('created_at', { ascending: false });
+
+      // 8. Programas más vistos (por minutos de lecciones vistas)
+      const { data: allProgress } = await supabase
+        .from('lesson_progress')
+        .select('watched_seconds, lessons!inner(course_id, courses!inner(program_courses!inner(program_id, programs!inner(title))))');
+
+      const minutesByProgram: Record<string, { title: string; minutes: number }> = {};
+      (allProgress || []).forEach((prog: any) => {
+        const programId = prog.lessons?.courses?.program_courses?.[0]?.program_id;
+        const programTitle = prog.lessons?.courses?.program_courses?.[0]?.programs?.title;
+        if (!programId || !programTitle) return;
+
+        if (!minutesByProgram[programId]) {
+          minutesByProgram[programId] = { title: programTitle, minutes: 0 };
+        }
+        minutesByProgram[programId].minutes += Math.floor((prog.watched_seconds || 0) / 60);
+      });
+
+      const topPrograms = Object.entries(minutesByProgram)
+        .map(([id, data]) => ({ id, title: data.title, view_minutes: data.minutes }))
+        .sort((a, b) => b.view_minutes - a.view_minutes)
         .slice(0, 5);
 
-      // Calcular Top Programa a partir de minutos por curso
-      let topProgramTitle = '';
-      let topProgramMinutes = 0;
-      const allCourseIds = Object.keys(minutesByCourse);
-      if (allCourseIds.length > 0) {
-        const { data: pcMap } = await supabase
-          .from('program_courses')
-          .select('program_id, course_id, programs(title)')
-          .in('course_id', allCourseIds);
-        const minutesByProgram: Record<string, { title: string; minutes: number }> = {};
-        (pcMap || []).forEach((row: any) => {
-          const pid = row.program_id;
-          const title = row.programs?.title || 'Programa';
-          const courseMin = minutesByCourse[row.course_id]?.minutes || 0;
-          if (!minutesByProgram[pid]) minutesByProgram[pid] = { title, minutes: 0 };
-          minutesByProgram[pid].minutes += courseMin;
-        });
-        const topProg = Object.values(minutesByProgram).sort((a, b) => b.minutes - a.minutes)[0];
-        if (topProg) { topProgramTitle = topProg.title; topProgramMinutes = topProg.minutes; }
-      }
+      // 9. Cursos más vistos
+      const minutesByCourse: Record<string, { title: string; minutes: number }> = {};
+      (allProgress || []).forEach((prog: any) => {
+        const courseId = prog.lessons?.course_id;
+        const courseTitle = prog.lessons?.courses?.title;
+        if (!courseId || !courseTitle) return;
 
-      const topCourseTitle = topCourses[0]?.title || '';
-      const topCourseMinutes = topCourses[0]?.minutes || 0;
-
-      // Active users in range (any activity)
-      const activeSet = new Set<string>();
-      const startIso = new Date(rangeStart).toISOString();
-      const endIso = new Date(new Date(rangeEnd).getTime() + 24*60*60*1000).toISOString();
-      const { data: lpActive } = await supabase
-        .from('lesson_progress')
-        .select('user_id, updated_at')
-        .gte('updated_at', startIso)
-        .lt('updated_at', endIso);
-      (lpActive || []).forEach((r: any) => r.user_id && activeSet.add(r.user_id));
-      const { data: asgActive } = await supabase
-        .from('assignments')
-        .select('user_id, created_at')
-        .gte('created_at', startIso)
-        .lt('created_at', endIso);
-      (asgActive || []).forEach((r: any) => r.user_id && activeSet.add(r.user_id));
-      // If messages table exists, try read; ignore error if not
-      try {
-        const { data: msgActive } = await supabase
-          .from('messages')
-          .select('sender_id, created_at')
-          .gte('created_at', startIso)
-          .lt('created_at', endIso);
-        (msgActive || []).forEach((r: any) => r.sender_id && activeSet.add(r.sender_id));
-      } catch {}
-
-      // Active users last 7 days (rolling)
-      const weekStartIso = new Date(Date.now() - 7*24*60*60*1000).toISOString();
-      const weekActive = new Set<string>();
-      const { data: lpW } = await supabase.from('lesson_progress').select('user_id, updated_at').gte('updated_at', weekStartIso);
-      (lpW || []).forEach((r: any) => r.user_id && weekActive.add(r.user_id));
-      const { data: asgW } = await supabase.from('assignments').select('user_id, created_at').gte('created_at', weekStartIso);
-      (asgW || []).forEach((r: any) => r.user_id && weekActive.add(r.user_id));
-      try {
-        const { data: msgW } = await supabase.from('messages').select('sender_id, created_at').gte('created_at', weekStartIso);
-        (msgW || []).forEach((r: any) => r.sender_id && weekActive.add(r.sender_id));
-      } catch {}
-
-      setActivity({
-        programs: progCount || 0,
-        courses: courseCount || 0,
-        usersInPrograms,
-        usersInIndividual,
-        newWeek: (pWeek || []).length,
-        newMonth: (pMonth || []).length,
-        newYear: (pYear || []).length,
-        active30: activeSet.size,
-        active7: weekActive.size,
-        totalStudents: totalStudents || 0,
-        totalActiveStudentsMonth: 0, // placeholder, set below
-        totalTeachers: totalTeachers || 0,
-        totalVolunteers: totalVolunteers || 0,
-        topCourses,
-        topCourseTitle,
-        topCourseMinutes,
-        topProgramTitle,
-        topProgramMinutes,
-        activeUsersList: [],
-        activeUsers20List: [],
+        if (!minutesByCourse[courseId]) {
+          minutesByCourse[courseId] = { title: courseTitle, minutes: 0 };
+        }
+        minutesByCourse[courseId].minutes += Math.floor((prog.watched_seconds || 0) / 60);
       });
 
-      // Calcular estudiantes activos último mes
-      const { data: lpMonth } = await supabase
-        .from('lesson_progress')
-        .select('user_id, updated_at')
-        .gte('updated_at', monthAgo);
-      const activeMonthSet = new Set<string>((lpMonth || []).map((r: any) => r.user_id).filter(Boolean));
-      let activeStudentsMonth = 0;
-      if (activeMonthSet.size > 0) {
-        const { data: activeStudents } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('role', 'student')
-          .in('id', Array.from(activeMonthSet));
-        activeStudentsMonth = (activeStudents || []).length;
-      }
-      // Lista de usuarios activos (30 días) – mostrar hasta 12 nombres
-      let activeUsersList: Array<{ id: string; name: string }> = [];
-      if (activeSet.size > 0) {
-        const { data: actUsers } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', Array.from(activeSet))
-          .limit(12);
-        activeUsersList = (actUsers || []).map((u: any) => ({ id: u.id, name: u.full_name || '' }));
-      }
-      setActivity(prev => ({ ...prev, totalActiveStudentsMonth: activeStudentsMonth, activeUsersList }));
+      const topCourses = Object.entries(minutesByCourse)
+        .map(([id, data]) => ({ id, title: data.title, view_minutes: data.minutes }))
+        .sort((a, b) => b.view_minutes - a.view_minutes)
+        .slice(0, 5);
+
+      setActivity({
+        programs: programsWithCourses,
+        totalUsers: totalStudents || 0,
+        newUsers30Days: newUsers || [],
+        inactiveUsers17Days: filteredInactive,
+        frequentUsers: frequentUsersData,
+        formadores: formadores || [],
+        voluntarios: voluntarios || [],
+        topPrograms,
+        topCourses,
+      });
+    } catch (error) {
+      console.error('Error fetching activity data:', error);
     } finally {
       setActivityLoading(false);
     }
@@ -446,39 +267,16 @@ export default function Admin() {
 
   const handleSuccess = () => {
     refetch();
-  };
-
-  const exportCsv = () => {
-    const lines: string[] = [];
-    const add = (arr: (string | number)[]) => lines.push(arr.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
-    add(['Métrica', 'Valor']);
-    add(['Programas', activity.programs]);
-    add(['Usuarios en programas', activity.usersInPrograms]);
-    add(['Cursos', activity.courses]);
-      add(['Usuarios en programas', activity.usersInIndividual]);
-    add(['Nuevos 7 días', activity.newWeek]);
-    add(['Nuevos 30 días', activity.newMonth]);
-    add(['Nuevos 365 días', activity.newYear]);
-    add(['Activos 30 días', activity.active30]);
-    lines.push('');
-    add(['Top Cursos', 'Minutos']);
-    activity.topCourses.forEach(c => add([c.title, c.minutes]));
-    const csv = lines.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const date = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-    a.href = url; a.download = `actividad-campus-${date}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    fetchActivityData();
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className={`${isMobile ? 'space-y-4' : 'flex items-center justify-between'}`}>
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Panel de Administrador</h1>
-          <p className="text-muted-foreground">Gestiona todo el Campus de Geometría Sagrada</p>
+          <h1 className="text-3xl font-bold text-foreground">Actividad</h1>
+          <p className="text-muted-foreground">Panel de control del Campus</p>
         </div>
         <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-row'}`}>
           <Button onClick={handleCreateProgram} className="gap-2">
@@ -489,13 +287,13 @@ export default function Admin() {
             <Plus className="h-4 w-4" />
             Nuevo Curso
           </Button>
-          <Button 
+          <Button
             onClick={() => {
               if (stats.totalPrograms > 0) {
                 setShowProgramSelector(true);
               }
-            }} 
-            className="gap-2" 
+            }}
+            className="gap-2"
             variant="outline"
             disabled={stats.totalPrograms === 0}
           >
@@ -505,201 +303,380 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* Actividad (solo admin) */}
-      <div>
-        <div className={`${isMobile ? 'space-y-4' : 'flex items-center justify-between'} mb-2`}>
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-accent" />
-            <h2 className="text-xl font-semibold">Actividad</h2>
-          </div>
-          <div className={`flex items-center gap-2 ${isMobile ? 'flex-col' : 'flex-row'}`}>
-            <div className={`flex items-center gap-1 text-sm ${isMobile ? 'flex-col' : 'flex-row'}`}>
-              <span>Desde</span>
-              <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} className="bg-transparent border rounded px-2 py-1" />
-              <span>Hasta</span>
-              <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} className="bg-transparent border rounded px-2 py-1" />
-              <Button size="sm" variant="outline" onClick={() => fetchActivity(rangeStart, rangeEnd)}>Aplicar</Button>
-            </div>
-            <Button variant="outline" size="sm" onClick={exportCsv} className={isMobile ? 'w-full' : ''}>Exportar CSV</Button>
-          </div>
+      {activityLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-        {activityLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <>
-            <div className={`grid gap-4 ${isMobile ? 'grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
-              <Card role="button" onClick={() => openActivityDialog('programs', 'Programas')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Programas</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.programs}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('usersInPrograms', 'Usuarios en programas')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en programas</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.usersInPrograms}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('courses', 'Cursos')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Cursos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.courses}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('usersInIndividualCourses', 'Usuarios en cursos individuales')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Usuarios en cursos individuales</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.usersInIndividual}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('newWeek', 'Nuevos usuarios 7 días')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Nuevos 7 días</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.newWeek}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('newMonth', 'Nuevos usuarios en 30 días')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Nuevos 30 días</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.newMonth}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('active30', 'Usuarios activos 30 días')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Activos 30 días</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.active30}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('active7', 'Usuarios activos esta semana')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Activos 7 días</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.active7}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" onClick={() => openActivityDialog('newYear', 'Nuevos usuarios este año')} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Nuevos este año</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.newYear}</div>
-                </CardContent>
-              </Card>
-            </div>
-            <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-2'} mt-4`}>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Más Vistos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`grid ${isMobile ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-2'} gap-3`}>
-                    <div className="p-3 border rounded-lg">
-                      <div className="text-xs text-muted-foreground mb-1">Programa más visto</div>
-                      <div className="font-medium line-clamp-2">{activity.topProgramTitle || '—'}</div>
-                      <div className="text-sm text-muted-foreground">{activity.topProgramMinutes} min</div>
+      ) : (
+        <div className="space-y-4">
+          {/* Programas */}
+          <Collapsible open={expandedCards['programs']} onOpenChange={() => toggleCard('programs')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                        <BookOpen className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Programas</CardTitle>
+                        <p className="text-sm text-muted-foreground">{activity.programs.length} programas totales</p>
+                      </div>
                     </div>
-                    <div className="p-3 border rounded-lg">
-                      <div className="text-xs text-muted-foreground mb-1">Curso más visto</div>
-                      <div className="font-medium line-clamp-2">{activity.topCourseTitle || '—'}</div>
-                      <div className="text-sm text-muted-foreground">{activity.topCourseMinutes} min</div>
-                    </div>
+                    {expandedCards['programs'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                   </div>
-                </CardContent>
-              </Card>
-              <Card role="button" className="cursor-pointer" onClick={() => openActivityDialog('active30', 'Usuarios activos 30 días')}>
-                <CardHeader>
-                  <CardTitle className="text-sm">Estudiantes activos (30 días)</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-center">{activity.active30}</div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.programs.map(program => (
+                    <div key={program.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div>
+                        <p className="font-medium">{program.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {program.courses_count} curso{program.courses_count !== 1 ? 's' : ''} • Creado {formatDistanceToNow(new Date(program.created_at), { addSuffix: true, locale: es })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {activity.programs.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No hay programas creados</p>
+                  )}
                 </CardContent>
-              </Card>
-              
-            </div>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-            {/* Totales por rol - responsive */}
-            <div className={`grid gap-4 ${isMobile ? 'grid-cols-2' : 'md:grid-cols-2 lg:grid-cols-4'} mt-4`}>
-              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('totalStudents', 'Total de estudiantes')}>
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Estudiantes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalStudents}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('activeStudentsMonth', 'Estudiantes activos último mes')}>
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Activos mes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalActiveStudentsMonth}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('totalTeachers', 'Total de formadores')}>
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Formadores</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalTeachers}</div>
-                </CardContent>
-              </Card>
-              <Card role="button" className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openActivityDialog('totalVolunteers', 'Total de voluntarios')}>
-                <CardHeader className="pb-2">
-                  <CardTitle className={`text-sm ${isMobile ? 'text-xs' : ''}`}>Voluntarios</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`}>{activity.totalVolunteers}</div>
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        )}
-      </div>
+          {/* Total Usuarios */}
+          <Card className="overflow-hidden hover:shadow-md transition-shadow">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                  <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Total Estudiantes</CardTitle>
+                  <p className="text-2xl font-bold">{activity.totalUsers}</p>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
 
-      {/* Estadísticas básicas: removidas por solicitud */}
+          {/* Nuevos 30 días */}
+          <Collapsible open={expandedCards['new30']} onOpenChange={() => toggleCard('new30')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                        <UserCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Nuevos Usuarios (30 días)</CardTitle>
+                        <p className="text-sm text-muted-foreground">{activity.newUsers30Days.length} nuevos estudiantes</p>
+                      </div>
+                    </div>
+                    {expandedCards['new30'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.newUsers30Days.map(user => (
+                    <div key={user.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.avatar_url || undefined} alt={user.full_name} />
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          {getInitials(user.full_name || 'U')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium">{user.full_name}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                      <Badge variant="secondary">
+                        {formatDistanceToNow(new Date(user.created_at), { addSuffix: true, locale: es })}
+                      </Badge>
+                    </div>
+                  ))}
+                  {activity.newUsers30Days.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No hay nuevos usuarios</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-      {!loading && stats.totalPrograms === 0 && (
-        <div className="text-center py-12">
-          <div className="max-w-md mx-auto">
-            <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">¡Comienza creando contenido!</h3>
-            <p className="text-muted-foreground mb-6">
-              Tu campus está listo. Crea programas y cursos para empezar a gestionar el aprendizaje.
-            </p>
-            <div className="flex gap-2 justify-center">
-              <Button onClick={handleCreateProgram} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Mi Primer Programa
-              </Button>
-            </div>
-          </div>
+          {/* Sin conexión 17 días */}
+          <Collapsible open={expandedCards['inactive']} onOpenChange={() => toggleCard('inactive')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow border-orange-200 dark:border-orange-900">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
+                        <UserMinus className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Sin Progreso (17 días)</CardTitle>
+                        <p className="text-sm text-muted-foreground">{activity.inactiveUsers17Days.length} usuarios inactivos</p>
+                      </div>
+                    </div>
+                    {expandedCards['inactive'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.inactiveUsers17Days.slice(0, 20).map(user => (
+                    <div key={user.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.avatar_url || undefined} alt={user.full_name} />
+                        <AvatarFallback className="bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-400">
+                          {getInitials(user.full_name || 'U')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium">{user.full_name}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                      <Badge variant="outline" className="text-orange-600 border-orange-600">
+                        {user.last_activity
+                          ? `Última: ${formatDistanceToNow(new Date(user.last_activity), { addSuffix: true, locale: es })}`
+                          : 'Sin actividad'}
+                      </Badge>
+                    </div>
+                  ))}
+                  {activity.inactiveUsers17Days.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">Todos los usuarios están activos</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Usuarios Frecuentes */}
+          <Collapsible open={expandedCards['frequent']} onOpenChange={() => toggleCard('frequent')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow border-emerald-200 dark:border-emerald-900">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
+                        <TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Usuarios Frecuentes (15 días)</CardTitle>
+                        <p className="text-sm text-muted-foreground">{activity.frequentUsers.length} usuarios con 2+ días de actividad</p>
+                      </div>
+                    </div>
+                    {expandedCards['frequent'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.frequentUsers.map(user => (
+                    <div key={user.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.avatar_url || undefined} alt={user.full_name} />
+                        <AvatarFallback className="bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400">
+                          {getInitials(user.full_name || 'U')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium">{user.full_name}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                      <Badge variant="outline" className="text-emerald-600 border-emerald-600">
+                        {user.activity_count} días activos
+                      </Badge>
+                    </div>
+                  ))}
+                  {activity.frequentUsers.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No hay usuarios frecuentes</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Formadores */}
+          <Collapsible open={expandedCards['formadores']} onOpenChange={() => toggleCard('formadores')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
+                        <GraduationCap className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Formadores</CardTitle>
+                        <p className="text-sm text-muted-foreground">{activity.formadores.length} formadores</p>
+                      </div>
+                    </div>
+                    {expandedCards['formadores'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.formadores.map(user => (
+                    <div key={user.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.avatar_url || undefined} alt={user.full_name} />
+                        <AvatarFallback className="bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400">
+                          {getInitials(user.full_name || 'U')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium">{user.full_name}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {activity.formadores.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No hay formadores</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Voluntarios */}
+          <Collapsible open={expandedCards['voluntarios']} onOpenChange={() => toggleCard('voluntarios')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-pink-100 dark:bg-pink-900 flex items-center justify-center">
+                      <Users className="h-6 w-6 text-pink-600 dark:text-pink-400" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Voluntarios</CardTitle>
+                      <p className="text-sm text-muted-foreground">{activity.voluntarios.length} voluntarios</p>
+                    </div>
+                    {expandedCards['voluntarios'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.voluntarios.map(user => (
+                    <div key={user.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.avatar_url || undefined} alt={user.full_name} />
+                        <AvatarFallback className="bg-pink-100 dark:bg-pink-900 text-pink-600 dark:text-pink-400">
+                          {getInitials(user.full_name || 'U')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium">{user.full_name}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {activity.voluntarios.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No hay voluntarios</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Programas Más Vistos */}
+          <Collapsible open={expandedCards['topPrograms']} onOpenChange={() => toggleCard('topPrograms')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                        <Eye className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Programas Más Vistos</CardTitle>
+                        <p className="text-sm text-muted-foreground">Top 5 por minutos vistos</p>
+                      </div>
+                    </div>
+                    {expandedCards['topPrograms'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.topPrograms.map((program, index) => (
+                    <div key={program.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="h-8 w-8 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center font-bold text-amber-600 dark:text-amber-400">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{program.title}</p>
+                        <p className="text-sm text-muted-foreground">{program.view_minutes.toLocaleString()} minutos vistos</p>
+                      </div>
+                    </div>
+                  ))}
+                  {activity.topPrograms.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No hay datos de visualización</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Cursos Más Vistos */}
+          <Collapsible open={expandedCards['topCourses']} onOpenChange={() => toggleCard('topCourses')}>
+            <Card className="overflow-hidden hover:shadow-md transition-shadow">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-cyan-100 dark:bg-cyan-900 flex items-center justify-center">
+                        <Eye className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">Cursos Más Vistos</CardTitle>
+                        <p className="text-sm text-muted-foreground">Top 5 por minutos vistos</p>
+                      </div>
+                    </div>
+                    {expandedCards['topCourses'] ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 space-y-3">
+                  {activity.topCourses.map((course, index) => (
+                    <div key={course.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="h-8 w-8 rounded-full bg-cyan-100 dark:bg-cyan-900 flex items-center justify-center font-bold text-cyan-600 dark:text-cyan-400">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{course.title}</p>
+                        <p className="text-sm text-muted-foreground">{course.view_minutes.toLocaleString()} minutos vistos</p>
+                      </div>
+                    </div>
+                  ))}
+                  {activity.topCourses.length === 0 && (
+                    <p className="text-center text-muted-foreground py-4">No hay datos de visualización</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </div>
       )}
 
-      <CreateProgramForm 
-        open={showCreateProgram} 
+      {/* Dialogs */}
+      <CreateProgramForm
+        open={showCreateProgram}
         onOpenChange={setShowCreateProgram}
         onSuccess={handleSuccess}
       />
-      <CreateCourseForm 
-        open={showCreateCourse} 
+      <CreateCourseForm
+        open={showCreateCourse}
         onOpenChange={setShowCreateCourse}
         onSuccess={handleSuccess}
       />
@@ -719,61 +696,6 @@ export default function Admin() {
           onSuccess={handleSuccess}
         />
       )}
-      {selectedUserId && (
-        <UserProfileDialog
-          open={showUserProfile}
-          onOpenChange={setShowUserProfile}
-          userId={selectedUserId}
-        />
-      )}
-      <Dialog open={activityDialogOpen} onOpenChange={setActivityDialogOpen}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader>
-            <DialogTitle>
-              {activityDialogTitle}
-              <span className="text-xs text-muted-foreground ml-2">
-                {activityDetailData.length} resultados
-              </span>
-            </DialogTitle>
-            <DialogDescription>
-              {activityDialogType === 'programs' ? 'Lista de programas' : 
-               activityDialogType === 'courses' ? 'Lista de cursos' : 
-               'Lista de usuarios'}
-            </DialogDescription>
-          </DialogHeader>
-            <div className="space-y-3">
-              <div className="space-y-3 max-h-[60vh] overflow-auto">
-              {activityDetailData.map((item, index) => (
-                <div key={item.id || index} className="p-3 border rounded-md">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{item.title || item.full_name || item.name || 'Sin nombre'}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {item.email || item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
-                      </div>
-                    </div>
-                    {(item.id && (item.full_name || item.email)) && (
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        onClick={() => { 
-                          setSelectedUserId(item.id); 
-                          setShowUserProfile(true); 
-                        }}
-                      >
-                      Ver perfil
-                    </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {activityDetailData.length === 0 && (
-                <p className="text-sm text-muted-foreground">Sin datos</p>
-              )}
-              </div>
-            </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
