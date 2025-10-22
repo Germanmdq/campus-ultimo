@@ -88,12 +88,57 @@ export default function Admin() {
     try {
       setActivityLoading(true);
 
-      // 1. Programas con conteo de cursos
-      const { data: programsData } = await supabase
-        .from('programs')
-        .select('id, title, created_at')
-        .order('created_at', { ascending: false });
+      // Ejecutar queries en paralelo para mejor performance
+      const [
+        { data: programsData },
+        { count: totalStudents },
+        { data: newUsers },
+        { data: allStudents },
+        { data: formadores },
+        { data: voluntarios },
+      ] = await Promise.all([
+        // 1. Programas
+        supabase
+          .from('programs')
+          .select('id, title, created_at')
+          .order('created_at', { ascending: false }),
 
+        // 2. Total estudiantes
+        supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('role', 'student'),
+
+        // 3. Nuevos usuarios
+        supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, created_at, email')
+          .eq('role', 'student')
+          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false }),
+
+        // 4. Todos los estudiantes (para inactivos)
+        supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, email')
+          .eq('role', 'student'),
+
+        // 6. Formadores
+        supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, created_at, email')
+          .eq('role', 'formador')
+          .order('created_at', { ascending: false }),
+
+        // 7. Voluntarios
+        supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, created_at, email')
+          .eq('role', 'voluntario' as any)
+          .order('created_at', { ascending: false }),
+      ]);
+
+      // Contar cursos por programa (en paralelo)
       const programsWithCourses = await Promise.all(
         (programsData || []).map(async (prog) => {
           const { count } = await supabase
