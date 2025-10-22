@@ -263,136 +263,151 @@ export default function LessonDetail() {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Lesson Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Video */}
-          {lesson.video_url && (
-            <Card>
-              <CardContent className="p-0">
-                <div className="aspect-video">
-                  <iframe
-                    src={lesson.video_url}
-                    title={lesson.title}
-                    className="w-full h-full rounded-lg"
-                    allowFullScreen
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
+      {/* Lesson Content - Vista de alumno mejorada */}
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Video */}
+        {lesson.video_url && (
+          <Card>
+            <CardContent className="p-0">
+              <div className="aspect-video">
+                <iframe
+                  src={lesson.video_url}
+                  title={lesson.title}
+                  className="w-full h-full rounded-lg"
+                  allowFullScreen
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-          {/* Description card - SIEMPRE VISIBLE */}
-          {lesson.description && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Descripción de la lección</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="prose dark:prose-invert max-w-none">
-                  <ReactMarkdown>{lesson.description}</ReactMarkdown>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+        {/* Información de la lección */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5" />
+                Información de la lección
+              </CardTitle>
+              {isTeacherOrAdmin && (
+                <Button onClick={() => setShowMaterials(true)} variant="outline" size="sm">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Gestionar Materiales
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <BookOpen className="h-4 w-4" />
+              <span className="text-sm">Duración: {lesson.duration_minutes} minutos</span>
+            </div>
+            {materials.length > 0 && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <FileText className="h-4 w-4" />
+                <span className="text-sm">{materials.length} material(es) disponibles</span>
+              </div>
+            )}
+            {lesson.has_assignment && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Users className="h-4 w-4" />
+                <span className="text-sm">Tiene trabajo práctico entregable</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-          {/* Materials section - SIEMPRE VISIBLE */}
-          {(
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Materiales
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {materials.length > 0 ? (
-                  materials.map(material => (
-                    <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        {material.type === 'file' ? <FileText className="h-4 w-4" /> : <Link className="h-4 w-4" />}
-                        <div>
-                          <h4 className="font-medium">{material.title}</h4>
-                          <Badge variant="secondary" className="text-xs">
-                            {material.type === 'file' ? 'Archivo' : 'Enlace'}
-                          </Badge>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          const url = material.type === 'file' ? material.file_url : material.url;
-                          if (url) window.open(url, '_blank');
-                        }}
-                      >
-                        {material.type === 'file' ? 'Descargar' : 'Abrir'}
-                      </Button>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No hay materiales disponibles</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Lesson Info */}
-        <div className="lg:col-span-1">
+        {/* Description card */}
+        {lesson.description && (
           <Card>
             <CardHeader>
-              <CardTitle>Información</CardTitle>
+              <CardTitle className="text-lg">Descripción</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="prose dark:prose-invert max-w-none">
+                <ReactMarkdown>{lesson.description}</ReactMarkdown>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Materials section - SOLO SI HAY MATERIALES */}
+        {materials.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Materiales de la lección
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {materials.map(material => (
+                <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    {material.type === 'file' ? <FileText className="h-5 w-5 text-primary" /> : <Link className="h-5 w-5 text-primary" />}
+                    <div>
+                      <h4 className="font-medium">{material.title}</h4>
+                      <Badge variant="secondary" className="text-xs mt-1">
+                        {material.type === 'file' ? 'Archivo' : 'Enlace'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const url = material.type === 'file' ? material.file_url : material.url;
+                      if (url) window.open(url, '_blank');
+                    }}
+                  >
+                    {material.type === 'file' ? 'Descargar' : 'Abrir'}
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Assignment section - SOLO SI TIENE ENTREGABLE */}
+        {lesson.has_assignment && (
+          <Card className="border-primary/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Trabajo Práctico
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Duración: {lesson.duration_minutes} minutos</span>
-              </div>
-              
-              {lesson.has_assignment && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Tiene entregable</span>
+              {alreadySubmitted ? (
+                <div className="text-center py-8">
+                  <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+                    <div className="text-4xl text-green-600">✓</div>
                   </div>
-                  {(profile?.role === 'student' || profile?.role === 'admin') && (
-                    <div className="space-y-2 p-3 border rounded-md">
-                      {alreadySubmitted ? (
-                        <div className="text-center py-4">
-                          <div className="h-12 w-12 text-green-500 mx-auto mb-2">✓</div>
-                          <p className="text-green-600 font-medium">Trabajo enviado</p>
-                        </div>
-                      ) : (
-                        <Button
-                          className="w-full"
-                          onClick={() => {
-                            if (lesson.approval_form_url && lesson.approval_form_url !== 't') {
-                              window.open(lesson.approval_form_url, '_blank', 'noopener,noreferrer');
-                            } else {
-                              alert('URL de trabajo práctico no configurada. Contacta al administrador.');
-                            }
-                          }}
-                        >
-                          Enviar trabajo práctico
-                        </Button>
-                      )}
-                    </div>
-                  )}
+                  <p className="text-lg font-semibold text-green-600">Trabajo enviado</p>
+                  <p className="text-sm text-muted-foreground mt-2">Tu trabajo ha sido enviado para revisión</p>
                 </div>
-              )}
-              
-              {lesson.has_materials && (
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{materials.length} material(es)</span>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-muted-foreground">
+                    Esta lección requiere la entrega de un trabajo práctico.
+                  </p>
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    onClick={() => {
+                      if (lesson.approval_form_url && lesson.approval_form_url !== 't') {
+                        window.open(lesson.approval_form_url, '_blank', 'noopener,noreferrer');
+                      } else {
+                        alert('URL de trabajo práctico no configurada. Contacta al administrador.');
+                      }
+                    }}
+                  >
+                    Enviar Trabajo Práctico
+                  </Button>
                 </div>
               )}
             </CardContent>
           </Card>
-        </div>
+        )}
       </div>
 
       {/* Materials Dialog */}

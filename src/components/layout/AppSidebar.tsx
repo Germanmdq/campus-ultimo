@@ -228,6 +228,7 @@ export function AppSidebar() {
         {!collapsed && profile && (
           <div className="flex items-center gap-3 mb-3">
             <Avatar className="h-8 w-8">
+              <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name} />
               <AvatarFallback className="bg-accent text-accent-foreground text-xs">
                 {getUserInitials(profile.full_name)}
               </AvatarFallback>

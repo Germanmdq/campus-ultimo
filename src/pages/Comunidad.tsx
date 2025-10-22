@@ -31,6 +31,7 @@ interface ForumPost {
   is_liked?: boolean;
   author_name?: string;
   author_role?: string;
+  author_avatar_url?: string;
   files?: ForumPostFile[];
 }
 
@@ -148,7 +149,8 @@ export default function Comunidad() {
           forum_id,
           profiles (
             full_name,
-            role
+            role,
+            avatar_url
           ),
           forum_post_likes (
             id,
@@ -179,6 +181,7 @@ export default function Comunidad() {
         ...post,
         author_name: post.profiles?.full_name || 'Usuario',
         author_role: post.profiles?.role || 'student',
+        author_avatar_url: post.profiles?.avatar_url || null,
         likes_count: post.forum_post_likes?.length || 0,
         replies_count: post.forum_post_replies?.length || 0,
         is_liked: user ? post.forum_post_likes?.some((like: any) => like.user_id === user.id) : false,
@@ -739,7 +742,8 @@ export default function Comunidad() {
           author_id,
           profiles!forum_post_replies_author_id_fkey (
             full_name,
-            role
+            role,
+            avatar_url
           )
         `)
         .eq('post_id', postId)
@@ -773,6 +777,7 @@ export default function Comunidad() {
           content: reply.content,
           author_name: reply.profiles?.full_name || 'Usuario',
           author_role: reply.profiles?.role || 'student',
+          author_avatar_url: reply.profiles?.avatar_url || null,
           author_id: reply.author_id,
           created_at: reply.created_at,
           files: replyFiles.map((f: any) => ({
@@ -1142,6 +1147,7 @@ export default function Comunidad() {
           <CardContent className="p-4">
             <div className="flex gap-3">
               <Avatar className="h-10 w-10">
+                <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || 'Usuario'} />
                 <AvatarFallback className="bg-primary text-primary-foreground">
                   {profile?.full_name?.charAt(0)?.toUpperCase() || 'U'}
                 </AvatarFallback>
@@ -1188,6 +1194,7 @@ export default function Comunidad() {
             <div className="space-y-4">
               <div className="flex gap-3">
                 <Avatar className="h-10 w-10">
+                  <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || 'Usuario'} />
                   <AvatarFallback className="bg-primary text-primary-foreground">
                     {profile?.full_name?.charAt(0)?.toUpperCase() || 'U'}
                   </AvatarFallback>
@@ -1328,6 +1335,7 @@ export default function Comunidad() {
                   <div className="p-4">
                     <div className="flex items-start gap-3">
                       <Avatar className="h-10 w-10">
+                        <AvatarImage src={post.author_avatar_url || undefined} alt={post.author_name || 'Usuario'} />
                         <AvatarFallback className="bg-primary text-primary-foreground">
                           {getInitials(post.author_name || 'U')}
                         </AvatarFallback>
@@ -1454,6 +1462,7 @@ export default function Comunidad() {
                           {replies[post.id].map((reply: any) => (
                             <div key={reply.id} className="flex gap-2">
                               <Avatar className="h-8 w-8">
+                                <AvatarImage src={reply.author_avatar_url || undefined} alt={reply.author_name || 'Usuario'} />
                                 <AvatarFallback className="bg-muted text-xs">
                                   {getInitials(reply.author_name)}
                                 </AvatarFallback>
@@ -1488,6 +1497,7 @@ export default function Comunidad() {
                       {/* New Comment Input */}
                       <div className="flex gap-2">
                         <Avatar className="h-8 w-8">
+                          <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || 'Usuario'} />
                           <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                             {profile?.full_name?.charAt(0)?.toUpperCase() || 'U'}
                           </AvatarFallback>
