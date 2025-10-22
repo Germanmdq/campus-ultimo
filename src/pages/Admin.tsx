@@ -88,6 +88,10 @@ export default function Admin() {
     try {
       setActivityLoading(true);
 
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const seventeenDaysAgo = new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString();
+      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+
       // Ejecutar queries en paralelo para mejor performance
       const [
         { data: programsData },
@@ -96,80 +100,24 @@ export default function Admin() {
         { data: allStudents },
         { data: formadores },
         { data: voluntarios },
+        { data: recentProgress },
       ] = await Promise.all([
-        // 1. Programas
-        supabase
-          .from('programs')
-          .select('id, title, created_at')
-          .order('created_at', { ascending: false }),
-
-        // 2. Total estudiantes
-        supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('role', 'student'),
-
-        // 3. Nuevos usuarios
-        supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, created_at, email')
-          .eq('role', 'student')
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-          .order('created_at', { ascending: false }),
-
-        // 4. Todos los estudiantes (para inactivos)
-        supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, email')
-          .eq('role', 'student'),
-
-        // 6. Formadores
-        supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, created_at, email')
-          .eq('role', 'formador')
-          .order('created_at', { ascending: false }),
-
-        // 7. Voluntarios
-        supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, created_at, email')
-          .eq('role', 'voluntario' as any)
-          .order('created_at', { ascending: false }),
+        supabase.from('programs').select('id, title, created_at').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'student').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, avatar_url, email').eq('role', 'student'),
+        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'formador').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'voluntario' as any).order('created_at', { ascending: false }),
+        supabase.from('lesson_progress').select('user_id, updated_at').gte('updated_at', fifteenDaysAgo),
       ]);
 
       // Contar cursos por programa (en paralelo)
       const programsWithCourses = await Promise.all(
         (programsData || []).map(async (prog) => {
-          const { count } = await supabase
-            .from('program_courses')
-            .select('*', { count: 'exact', head: true })
-            .eq('program_id', prog.id);
+          const { count } = await supabase.from('program_courses').select('*', { count: 'exact', head: true }).eq('program_id', prog.id);
           return { ...prog, courses_count: count || 0 };
         })
       );
-
-      // 2. Total usuarios (solo estudiantes)
-      const { count: totalStudents } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'student');
-
-      // 3. Nuevos usuarios últimos 30 días
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: newUsers } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url, created_at, email')
-        .eq('role', 'student')
-        .gte('created_at', thirtyDaysAgo)
-        .order('created_at', { ascending: false });
-
-      // 4. Usuarios sin conexión 17 días (sin progreso)
-      const seventeenDaysAgo = new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: allStudents } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url, email')
-        .eq('role', 'student');
 
       // Obtener última actividad de cada estudiante
       const inactiveUsers = await Promise.all(
@@ -192,13 +140,6 @@ export default function Admin() {
       );
 
       const filteredInactive = inactiveUsers.filter(u => u !== null) as any[];
-
-      // 5. Usuarios frecuentes (activos al menos 2 días en últimos 15 días)
-      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: recentProgress } = await supabase
-        .from('lesson_progress')
-        .select('user_id, updated_at')
-        .gte('updated_at', fifteenDaysAgo);
 
       // Agrupar por usuario y contar días únicos de actividad
       const activityByUser: Record<string, Set<string>> = {};
@@ -229,21 +170,7 @@ export default function Admin() {
         })).sort((a, b) => b.activity_count - a.activity_count);
       }
 
-      // 6. Formadores
-      const { data: formadores } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url, created_at, email')
-        .eq('role', 'formador')
-        .order('created_at', { ascending: false });
-
-      // 7. Voluntarios
-      const { data: voluntarios } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url, created_at, email')
-        .eq('role', 'voluntario' as any)
-        .order('created_at', { ascending: false });
-
-      // 8. Programas más vistos (por minutos de lecciones vistas)
+      // Programas más vistos (por minutos de lecciones vistas)
       const { data: allProgress } = await supabase
         .from('lesson_progress')
         .select('watched_seconds, lessons!inner(course_id, courses!inner(program_courses!inner(program_id, programs!inner(title))))');
@@ -265,7 +192,7 @@ export default function Admin() {
         .sort((a, b) => b.view_minutes - a.view_minutes)
         .slice(0, 5);
 
-      // 9. Cursos más vistos
+      // Cursos más vistos
       const minutesByCourse: Record<string, { title: string; minutes: number }> = {};
       (allProgress || []).forEach((prog: any) => {
         const courseId = prog.lessons?.course_id;
