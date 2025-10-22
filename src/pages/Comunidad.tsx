@@ -1522,10 +1522,10 @@ export default function Comunidad() {
                             <Button
                               size="icon"
                               onClick={() => handleAddReply(post.id)}
-                              className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90"
+                              className="h-8 w-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md"
                               title="Enviar comentario"
                             >
-                              <Send className="h-4 w-4" />
+                              <Send className="h-4 w-4 text-white" />
                             </Button>
                           )}
                         </div>
