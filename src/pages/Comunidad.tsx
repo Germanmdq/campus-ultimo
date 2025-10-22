@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2, Edit, Trash2, Settings, Image as ImageIcon, Film, Smile } from 'lucide-react';
+import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2, Edit, Trash2, Settings, Image as ImageIcon, Film, Smile, Send } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -1492,7 +1492,7 @@ export default function Comunidad() {
                             {profile?.full_name?.charAt(0)?.toUpperCase() || 'U'}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex-1 flex gap-2">
+                        <div className="flex-1 flex gap-2 items-center">
                           <Input
                             placeholder="Escribe un comentario..."
                             value={newReply[post.id] || ''}
@@ -1500,7 +1500,7 @@ export default function Comunidad() {
                               ...prev,
                               [post.id]: e.target.value
                             }))}
-                            className="bg-muted border-none rounded-full"
+                            className="bg-muted border-none rounded-full flex-1"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
@@ -1508,6 +1508,16 @@ export default function Comunidad() {
                               }
                             }}
                           />
+                          {newReply[post.id]?.trim() && (
+                            <Button
+                              size="icon"
+                              onClick={() => handleAddReply(post.id)}
+                              className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90"
+                              title="Enviar comentario"
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
