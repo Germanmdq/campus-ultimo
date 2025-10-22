@@ -1512,22 +1512,21 @@ export default function Comunidad() {
                             }))}
                             className="bg-muted border-none rounded-full flex-1"
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !e.shiftKey) {
+                              if (e.key === 'Enter' && !e.shiftKey && newReply[post.id]?.trim()) {
                                 e.preventDefault();
                                 handleAddReply(post.id);
                               }
                             }}
                           />
-                          {newReply[post.id]?.trim() && (
-                            <Button
-                              size="icon"
-                              onClick={() => handleAddReply(post.id)}
-                              className="h-8 w-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md"
-                              title="Enviar comentario"
-                            >
-                              <Send className="h-4 w-4 text-white" />
-                            </Button>
-                          )}
+                          <Button
+                            size="icon"
+                            onClick={() => handleAddReply(post.id)}
+                            disabled={!newReply[post.id]?.trim()}
+                            className="h-10 w-10 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:opacity-50 text-white shadow-lg flex-shrink-0"
+                            title="Enviar comentario"
+                          >
+                            <Send className="h-5 w-5 text-white" />
+                          </Button>
                         </div>
                       </div>
                     </div>

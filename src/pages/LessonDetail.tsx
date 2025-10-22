@@ -367,8 +367,8 @@ export default function LessonDetail() {
           </Card>
         )}
 
-        {/* Assignment section - SOLO SI TIENE ENTREGABLE */}
-        {lesson.has_assignment && (
+        {/* Assignment section - SOLO SI TIENE ENTREGABLE Y ES ESTUDIANTE */}
+        {lesson.has_assignment && !isTeacherOrAdmin && (
           <Card className="border-primary/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
