@@ -336,12 +336,43 @@ export default function Comunidad() {
   const uploadPostFiles = async (postId: string, files: File[]) => {
     if (files.length === 0) return [];
 
+    console.log('🔥 INICIANDO SUBIDA DE ARCHIVOS');
+    console.log('🔥 Archivos a subir:', files.length);
+    console.log('🔥 PostId:', postId);
+
     setUploadingFiles(true);
     const uploadedFiles = [];
 
     try {
+      // Verificar que el bucket existe
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      if (bucketsError) {
+        console.warn('⚠️ No se pudieron listar buckets:', bucketsError);
+      }
+
+      const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
+      if (!forumFilesBucket) {
+        console.log(`⚠️ Bucket 'forum-files' no encontrado. Intentando crearlo...`);
+        const { error: createError } = await supabase.storage.createBucket('forum-files', { public: true });
+        if (createError) {
+          console.error('❌ No se pudo crear el bucket forum-files:', createError);
+          toast({
+            title: 'Error de configuración',
+            description: 'El bucket de archivos no existe. Por favor contacta al administrador.',
+            variant: 'destructive'
+          });
+          setUploadingFiles(false);
+          return [];
+        }
+        console.log(`✅ Bucket 'forum-files' creado exitosamente`);
+      } else {
+        console.log("✅ Bucket 'forum-files' existe");
+      }
+
       for (const file of files) {
         try {
+          console.log(`📤 Subiendo archivo: ${file.name} (${file.type}, ${file.size} bytes)`);
+
           const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
           const fileName = `forum-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
           const filePath = `forum-files/${fileName}`;
@@ -354,11 +385,18 @@ export default function Comunidad() {
               contentType: file.type
             });
 
-          if (uploadError) throw uploadError;
+          if (uploadError) {
+            console.error('❌ Error en upload:', uploadError);
+            throw uploadError;
+          }
+
+          console.log(`✅ Archivo subido a storage: ${filePath}`);
 
           const { data: { publicUrl } } = supabase.storage
             .from('forum-files')
             .getPublicUrl(filePath);
+
+          console.log(`✅ URL pública generada: ${publicUrl}`);
 
           const { error: dbError } = await supabase
             .from('forum_post_files')
@@ -370,7 +408,12 @@ export default function Comunidad() {
               file_size: file.size
             }]);
 
-          if (dbError) throw dbError;
+          if (dbError) {
+            console.error('❌ Error guardando en DB:', dbError);
+            throw dbError;
+          }
+
+          console.log(`✅ Metadata guardada en DB para: ${file.name}`);
 
           uploadedFiles.push({
             file_url: publicUrl,
@@ -378,21 +421,27 @@ export default function Comunidad() {
             file_type: file.type,
             file_size: file.size
           });
-        } catch (error) {
-          console.error('Error uploading file:', error);
+        } catch (error: any) {
+          console.error('❌ Error uploading file:', error);
           toast({
             title: "Error subiendo archivo",
-            description: `No se pudo subir ${file.name}`,
+            description: error?.message || `No se pudo subir ${file.name}`,
             variant: "destructive",
           });
         }
       }
-    } catch (error) {
-      console.error('Error in uploadFiles:', error);
+    } catch (error: any) {
+      console.error('❌ Error in uploadFiles:', error);
+      toast({
+        title: "Error general",
+        description: error?.message || "Error al subir archivos",
+        variant: "destructive",
+      });
     } finally {
       setUploadingFiles(false);
     }
 
+    console.log(`✅ Subida completada. ${uploadedFiles.length} de ${files.length} archivos subidos`);
     return uploadedFiles;
   };
 
