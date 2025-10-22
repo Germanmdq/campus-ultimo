@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { 
-  Home, 
-  Users, 
-  BookOpen, 
-  GraduationCap, 
-  PlayCircle, 
-  Calendar, 
-  MessageSquare, 
-  User, 
+import {
+  Home,
+  Users,
+  BookOpen,
+  GraduationCap,
+  PlayCircle,
+  Calendar,
+  MessageSquare,
+  User,
   LogOut,
   Settings,
   Moon,
@@ -35,39 +35,34 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-// Unify logo usage with public asset
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 
 const getNavigationItems = (role: string) => {
-  const baseItems: { title: string, url: string, icon: any }[] = [];
-  // Quitar Panel de todos los roles
+  const baseItems: { title: string, url: string, icon: any, badge?: string }[] = [];
 
   if (role === 'admin' || role === 'formador' || role === 'teacher' || role === 'profesor') {
-    // Acceso directo a la actividad del admin
     baseItems.push({ title: "Actividad", url: "/admin", icon: Activity });
     baseItems.push({ title: "Usuarios", url: "/usuarios", icon: Users });
   }
 
-  // Estudiante: solo 'Mi Formación'
   if (role === 'student') {
     baseItems.push({ title: "Mi Formación", url: "/mi-formacion", icon: GraduationCap });
   } else {
-    // Otros roles: Programas y Cursos
     baseItems.push(
       { title: "Programas", url: "/programas", icon: BookOpen },
       { title: "Cursos", url: "/cursos", icon: GraduationCap }
     );
   }
-  
-  // Solo profesores y admins ven lecciones como gestión
+
   if (role === 'admin' || role === 'formador' || role === 'teacher' || role === 'profesor') {
     baseItems.push({ title: "Lecciones", url: "/lecciones", icon: PlayCircle });
     baseItems.push({ title: "Trabajos Prácticos", url: "/profesor", icon: Upload });
   }
-  
+
   baseItems.push(
     { title: "Calendario", url: "/calendario", icon: Calendar },
     { title: "Comunidad", url: "/comunidad", icon: MessageSquare }
@@ -84,13 +79,13 @@ export function AppSidebar() {
   const currentPath = location.pathname;
 
   const navigationItems = getNavigationItems(profile?.role || 'student');
-  
+
   const isActive = (path: string) => currentPath === path;
-  
+
   const getNavClass = ({ isActive }: { isActive: boolean }) =>
-    isActive 
-      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
-      : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground";
+    isActive
+      ? "bg-primary/10 text-primary font-semibold border-l-4 border-primary"
+      : "text-muted-foreground hover:bg-muted hover:text-foreground transition-all";
 
   const getUserInitials = (name: string) => {
     return name
@@ -124,6 +119,21 @@ export function AppSidebar() {
     }
   };
 
+  const getRoleBadgeVariant = (role?: string) => {
+    switch ((role || '').toLowerCase()) {
+      case 'admin':
+      case 'administrador':
+        return 'default';
+      case 'teacher':
+      case 'formador':
+        return 'secondary';
+      case 'voluntario':
+        return 'outline';
+      default:
+        return 'secondary';
+    }
+  };
+
   const handleSupportSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const mailto = `mailto:soporte@espaciodegemotriasagrada.com?subject=${encodeURIComponent('Consulta de soporte')}&body=${encodeURIComponent(`De: ${supportEmail}\n\n${supportMessage}`)}`;
@@ -133,138 +143,151 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      className={collapsed ? "w-14 overflow-hidden" : "w-60 overflow-hidden"}
+      className={collapsed ? "w-16" : "w-64"}
       collapsible="icon"
-      style={{
-        background: 'hsl(var(--surface) / 0.9)',
-        backdropFilter: 'blur(12px)',
-        boxShadow: 'var(--shadow-elev-1)'
-      }}
     >
-      <SidebarHeader className="border-b border-sidebar-border p-4">
-        {!collapsed && (
-          <div className="flex items-center justify-center">
-            <img src="/Logo-email.png" alt="Logo" className="h-8 w-auto object-contain max-w-[160px]" />
+      <SidebarHeader className="border-b p-4">
+        {!collapsed ? (
+          <div className="flex items-center gap-2">
+            <img src="/Logo-email.png" alt="Logo" className="h-10 w-auto object-contain" />
           </div>
-        )}
-        {collapsed && (
-          <img src="/Logo-email.png" alt="GS" className="h-8 w-auto object-contain mx-auto" />
+        ) : (
+          <img src="/Logo-email.png" alt="GS" className="h-10 w-auto object-contain mx-auto" />
         )}
       </SidebarHeader>
 
-      <SidebarContent className="overflow-hidden scrollbar-hide">
-        <SidebarGroup>
-          <SidebarGroupLabel>{!collapsed && "Navegación"}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navigationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      className={getNavClass}
-                      onClick={() => {
-                        // Close mobile sidebar when navigating
-                        if (window.innerWidth < 768) {
-                          setOpenMobile(false);
-                        }
-                      }}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <Separator className="mx-4" />
-
-        {/* Sección de administración removida por ahora */}
-
-        <SidebarGroup>
-          <SidebarGroupLabel>{!collapsed && "Configuración"}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink to="/cuenta" className={getNavClass}>
-                    <User className="h-4 w-4" />
-                    {!collapsed && <span>Mi Cuenta</span>}
-                  </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={toggleTheme}>
-                  {theme === 'dark' ? (
-                    <Sun className="h-4 w-4" />
-                  ) : (
-                    <Moon className="h-4 w-4" />
+      <SidebarContent className="px-2 py-4">
+        <SidebarMenu className="space-y-1">
+          {navigationItems.map((item) => (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton asChild className="h-11">
+                <NavLink
+                  to={item.url}
+                  className={getNavClass}
+                  onClick={() => {
+                    if (window.innerWidth < 768) {
+                      setOpenMobile(false);
+                    }
+                  }}
+                >
+                  <item.icon className="h-5 w-5 flex-shrink-0" />
+                  {!collapsed && <span className="ml-3">{item.title}</span>}
+                  {!collapsed && item.badge && (
+                    <Badge variant="secondary" className="ml-auto">{item.badge}</Badge>
                   )}
-                  {!collapsed && (
-                    <span>{theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</span>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
 
-              {/* Soporte solo para estudiantes, debajo del toggle */}
-              {profile?.role === 'student' && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => setSupportOpen(true)}>
-                    <MessageSquare className="h-4 w-4" />
-                    {!collapsed && <span>Soporte</span>}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+        <Separator className="my-4" />
+
+        <SidebarMenu className="space-y-1">
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild className="h-11">
+              <NavLink to="/cuenta" className={getNavClass}>
+                <User className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && <span className="ml-3">Mi Cuenta</span>}
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={toggleTheme} className="h-11">
+              {theme === 'dark' ? (
+                <Sun className="h-5 w-5 flex-shrink-0" />
+              ) : (
+                <Moon className="h-5 w-5 flex-shrink-0" />
               )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              {!collapsed && (
+                <span className="ml-3">{theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</span>
+              )}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          {profile?.role === 'student' && (
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => setSupportOpen(true)} className="h-11">
+                <MessageSquare className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && <span className="ml-3">Soporte</span>}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+        </SidebarMenu>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4">
+      <SidebarFooter className="border-t p-3">
         {!collapsed && profile && (
-          <div className="flex items-center gap-3 mb-3">
-            <Avatar className="h-8 w-8">
+          <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors mb-2">
+            <Avatar className="h-10 w-10 border-2 border-primary/20">
               <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name} />
-              <AvatarFallback className="bg-accent text-accent-foreground text-xs">
+              <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
                 {getUserInitials(profile.full_name)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{profile.full_name}</p>
-              <p className="text-xs text-muted-foreground">{getRoleLabel(profile.role)}</p>
+              <p className="text-sm font-semibold truncate">{profile.full_name}</p>
+              <Badge variant={getRoleBadgeVariant(profile.role)} className="mt-1 text-xs">
+                {getRoleLabel(profile.role)}
+              </Badge>
             </div>
           </div>
         )}
-        
+
+        {collapsed && profile && (
+          <div className="flex justify-center mb-2">
+            <Avatar className="h-10 w-10 border-2 border-primary/20">
+              <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name} />
+              <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
+                {getUserInitials(profile.full_name)}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        )}
+
         <Button
           onClick={signOut}
           variant="ghost"
           size={collapsed ? "icon" : "sm"}
-          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          className="w-full justify-start hover:bg-destructive/10 hover:text-destructive transition-colors"
         >
           <LogOut className="h-4 w-4" />
-          {!collapsed && <span className="ml-2">Salir</span>}
+          {!collapsed && <span className="ml-2">Cerrar Sesión</span>}
         </Button>
 
         <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-[95vw] sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Enviar consulta</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSupportSubmit} className="space-y-3">
+            <form onSubmit={handleSupportSubmit} className="space-y-4">
               <div>
-                <Label>Tu email</Label>
-                <Input type="email" value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} required />
+                <Label htmlFor="support-email">Tu email</Label>
+                <Input
+                  id="support-email"
+                  type="email"
+                  value={supportEmail}
+                  onChange={(e) => setSupportEmail(e.target.value)}
+                  required
+                  placeholder="tu@email.com"
+                />
               </div>
               <div>
-                <Label>Mensaje</Label>
-                <Textarea value={supportMessage} onChange={(e) => setSupportMessage(e.target.value)} rows={4} required />
+                <Label htmlFor="support-message">Mensaje</Label>
+                <Textarea
+                  id="support-message"
+                  value={supportMessage}
+                  onChange={(e) => setSupportMessage(e.target.value)}
+                  rows={4}
+                  required
+                  placeholder="Describe tu consulta..."
+                />
               </div>
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setSupportOpen(false)}>
+                  Cancelar
+                </Button>
                 <Button type="submit">Enviar</Button>
               </div>
             </form>
