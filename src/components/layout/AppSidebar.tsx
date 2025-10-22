@@ -84,8 +84,8 @@ export function AppSidebar() {
 
   const getNavClass = ({ isActive }: { isActive: boolean }) =>
     isActive
-      ? "bg-primary/10 text-primary font-semibold border-l-4 border-primary"
-      : "text-muted-foreground hover:bg-muted hover:text-foreground transition-all";
+      ? "bg-muted text-foreground font-medium"
+      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all";
 
   const getUserInitials = (name: string) => {
     return name
