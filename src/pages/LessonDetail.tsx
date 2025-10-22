@@ -390,19 +390,55 @@ export default function LessonDetail() {
                   <p className="text-muted-foreground">
                     Esta lección requiere la entrega de un trabajo práctico.
                   </p>
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    onClick={() => {
-                      if (lesson.approval_form_url && lesson.approval_form_url !== 't') {
-                        window.open(lesson.approval_form_url, '_blank', 'noopener,noreferrer');
-                      } else {
-                        alert('URL de trabajo práctico no configurada. Contacta al administrador.');
-                      }
-                    }}
-                  >
-                    Enviar Trabajo Práctico
-                  </Button>
+
+                  {/* Formulario externo (si existe) */}
+                  {lesson.approval_form_url && lesson.approval_form_url !== 't' && (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => window.open(lesson.approval_form_url, '_blank', 'noopener,noreferrer')}
+                    >
+                      Abrir Formulario de Envío
+                    </Button>
+                  )}
+
+                  {/* Envío directo */}
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-2">
+                      <label htmlFor="work-url" className="text-sm font-medium">
+                        Enlace a tu trabajo (Dropbox, Drive, etc.)
+                      </label>
+                      <Input
+                        id="work-url"
+                        type="url"
+                        placeholder="https://www.dropbox.com/..."
+                        value={dropboxLink}
+                        onChange={(e) => setDropboxLink(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="work-comments" className="text-sm font-medium">
+                        Comentarios (opcional)
+                      </label>
+                      <Textarea
+                        id="work-comments"
+                        placeholder="Agrega cualquier comentario sobre tu trabajo..."
+                        value={textAnswer}
+                        onChange={(e) => setTextAnswer(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      onClick={handleSubmitAssignment}
+                      disabled={submitting || !dropboxLink.trim()}
+                    >
+                      {submitting ? 'Enviando...' : 'Enviar Trabajo'}
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>

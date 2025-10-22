@@ -368,7 +368,7 @@ export default function Admin() {
 
           {/* Sin progreso 17 días */}
           <Card
-            className="cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border-orange-200 dark:border-orange-900"
+            className="cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
             onClick={() => openDialog('Sin Progreso (17 días)', activity.inactiveUsers17Days, 'inactive')}
           >
             <CardHeader className="pb-3">
@@ -386,7 +386,7 @@ export default function Admin() {
 
           {/* Usuarios Frecuentes */}
           <Card
-            className="cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border-emerald-200 dark:border-emerald-900"
+            className="cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
             onClick={() => openDialog('Usuarios Frecuentes (15 días)', activity.frequentUsers, 'frequent')}
           >
             <CardHeader className="pb-3">
