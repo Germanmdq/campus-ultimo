@@ -23,14 +23,14 @@ function ensureDownloadUrl(url: string, filename: string) {
 }
 
 export default function MaterialsSection({ materials }: { materials: Material[] }) {
+  // No mostrar nada si no hay materiales
+  if (!materials || materials.length === 0) {
+    return null;
+  }
+
   return (
     <div className="space-y-2">
-      {materials?.length === 0 ? (
-        <div className="text-center text-muted-foreground py-4">
-          <p>No hay materiales en esta lección</p>
-        </div>
-      ) : (
-        materials?.map((m) => {
+      {materials.map((m) => {
                 // Priorizar material_type de la base de datos, luego deducir por URLs
                 const mt = m.material_type || (m.file_url ? "file" : m.url ? "link" : "link");
                 const isFile = mt === "file" && !!m.file_url;
@@ -68,7 +68,7 @@ export default function MaterialsSection({ materials }: { materials: Material[] 
           </div>
         );
         })
-      )}
+      }
     </div>
   );
 }

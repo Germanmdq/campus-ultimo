@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -10,14 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2, Edit, Trash2, Settings } from 'lucide-react';
+import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2, Edit, Trash2, Settings, Image as ImageIcon, Film, Smile, Send } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import ForumFileUpload from '@/components/ui/forum-file-upload';
-import { uploadNestedFiles } from '@/components/ui/forum-nested-file-upload';
 
 interface ForumPost {
   id: string;
@@ -33,6 +31,7 @@ interface ForumPost {
   is_liked?: boolean;
   author_name?: string;
   author_role?: string;
+  author_avatar_url?: string;
   files?: ForumPostFile[];
 }
 
@@ -49,6 +48,7 @@ interface Forum {
   name: string;
   description?: string;
   program_id: string;
+  cover_image_url?: string;
   program?: {
     title: string;
   };
@@ -60,7 +60,6 @@ interface Program {
 }
 
 export default function Comunidad() {
-  // Vercel deploy test - reply files display fix
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [posts, setPosts] = useState<ForumPost[]>([]);
@@ -78,254 +77,30 @@ export default function Comunidad() {
     category: '',
     forum_id: ''
   });
-  
-  // Estado para el modal de imagen
+
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [newForum, setNewForum] = useState({
     name: '',
     description: '',
-    program_ids: [] as string[]
+    program_ids: [] as string[],
+    cover_image: null as File | null
   });
   const [editingForum, setEditingForum] = useState<Forum | null>(null);
   const [showEditForum, setShowEditForum] = useState(false);
   const [showReplies, setShowReplies] = useState<{ [postId: string]: boolean }>({});
   const [newReply, setNewReply] = useState<{ [postId: string]: string }>({});
   const [replies, setReplies] = useState<{ [postId: string]: any[] }>({});
-  
-  // Estados para comentarios anidados estilo chat
-  const [nestedReplyContent, setNestedReplyContent] = useState<{[key: string]: string}>({});
-  const [nestedReplyFiles, setNestedReplyFiles] = useState<{[key: string]: File[]}>({});
-  const [showNestedForm, setShowNestedForm] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [replyFiles, setReplyFiles] = useState<{ [postId: string]: File[] }>({});
 
-  const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
-  
-  // Componente para renderizar archivos adjuntos
-  const EnhancedFileAttachment = ({ file, onImageClick }: { file: any; onImageClick?: (url: string) => void }) => {
-    const isImage = file.file_type?.startsWith('image/');
-    const formatFileSize = (bytes: number) => {
-      if (!bytes) return '0 B';
-      if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-      return `${(bytes / 1048576).toFixed(1)} MB`;
-    };
+  // Quick post state (Facebook style)
+  const [quickPostContent, setQuickPostContent] = useState('');
+  const [quickPostFiles, setQuickPostFiles] = useState<File[]>([]);
+  const [showQuickPostDialog, setShowQuickPostDialog] = useState(false);
 
-    if (isImage) {
-      return (
-        <div className="group relative">
-          <div 
-            className="relative overflow-hidden rounded-lg cursor-pointer transform transition-all duration-200 hover:scale-105 hover:shadow-lg"
-            onClick={() => onImageClick?.(file.file_url)}
-          >
-            <img 
-              src={file.file_url} 
-              alt={file.file_name}
-              className="w-full h-32 object-cover"
-              loading="lazy"
-            />
-            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-end">
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 transform translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                <p className="text-white text-xs font-medium truncate">{file.file_name}</p>
-                <p className="text-white/80 text-xs">{formatFileSize(file.file_size)}</p>
-              </div>
-            </div>
-            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              <div className="bg-white/90 rounded-full p-1">
-                <svg className="w-4 h-4 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    const getFileIcon = (type: string) => {
-      if (type.includes('pdf')) return '📄';
-      if (type.includes('document') || type.includes('word')) return '📝';
-      if (type.includes('spreadsheet') || type.includes('excel')) return '📊';
-      if (type.includes('presentation') || type.includes('powerpoint')) return '📈';
-      if (type.includes('video')) return '🎥';
-      if (type.includes('audio')) return '🎵';
-      if (type.includes('zip') || type.includes('rar')) return '🗜️';
-      return '📎';
-    };
-
-    return (
-      <a 
-        href={file.file_url} 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="bg-muted/50 hover:bg-muted transition-colors duration-200 rounded-lg p-3 border border-border/50 hover:border-border cursor-pointer group block"
-      >
-        <div className="flex items-center gap-3">
-          <div className="text-2xl">{getFileIcon(file.file_type)}</div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-              {file.file_name}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatFileSize(file.file_size)}
-            </p>
-          </div>
-        </div>
-      </a>
-    );
-  };
-
-  // Componente para respuesta individual con estilo chat
-  const ReplyComponent = ({ 
-    reply, 
-    postId, 
-    currentUserId,
-    handleDeleteReply,
-    setSelectedImage
-  }: { reply: any; postId: string; currentUserId: string; handleDeleteReply: (replyId: string, postId: string) => void; setSelectedImage: (url: string | null) => void; }) => {
-    const isAdmin = reply.author_role === 'admin';
-    const isCurrentUser = reply.author_id === currentUserId;
-
-    return (
-       <div className={`flex gap-3 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-         {!isCurrentUser && (
-           <Avatar className="h-8 w-8">
-             <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-               {reply.author_name?.charAt(0)?.toUpperCase() || 'U'}
-             </AvatarFallback>
-           </Avatar>
-         )}
-         <div className={`max-w-[80%] space-y-1 ${isCurrentUser ? 'items-end' : 'items-start'} flex flex-col`}>
-           <div className={`group relative transition-all duration-200 hover:shadow-md rounded-2xl p-3 ${
-             isCurrentUser
-               ? 'bg-primary text-primary-foreground rounded-br-none'
-               : isAdmin
-                 ? 'bg-gradient-to-r from-orange-500/10 to-orange-600/20 border border-orange-200 rounded-bl-none text-foreground'
-                 : 'bg-muted hover:bg-muted/80 rounded-bl-none text-foreground'
-           }`}>
-             <div className={`flex items-center gap-2 mb-1 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'}`}>
-               <span className="font-medium text-sm">{reply.author_name}</span>
-               {isAdmin && (
-                 <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                   isCurrentUser
-                     ? 'bg-primary-foreground/20 text-primary-foreground'
-                     : 'bg-orange-500 text-white'
-                 }`}>
-                   Admin
-                 </span>
-               )}
-             </div>
-             <p className="leading-relaxed text-sm">{reply.content}</p>
- 
-             {/* Archivos adjuntos */}
-             {reply.files && reply.files.length > 0 && (
-               <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                 {reply.files.map((file: any) => {
-                   const isImage = file.file_type?.startsWith('image/');
-                   if (isImage) {
-                     return (
-                       <div
-                         key={file.id}
-                         className="group relative aspect-square overflow-hidden rounded-lg cursor-pointer"
-                         onClick={() => setSelectedImage(file.file_url)}
-                       >
-                         <img
-                           src={file.file_url}
-                           alt={file.file_name}
-                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                           loading="lazy"
-                         />
-                         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                       </div>
-                     );
-                   }
- 
-                   const formatFileSize = (bytes: number) => {
-                     if (!bytes) return '0 B';
-                     if (bytes < 1024) return `${bytes} B`;
-                     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-                     return `${(bytes / 1048576).toFixed(1)} MB`;
-                   };
- 
-                   const getFileIcon = (type: string) => {
-                     if (type?.includes('pdf')) return '📄';
-                     if (type?.includes('document') || type?.includes('word')) return '📝';
-                     if (type?.includes('spreadsheet') || type?.includes('excel')) return '📊';
-                     return '📎';
-                   };
- 
-                   return (
-                     <div key={file.id} className={`col-span-full flex items-center gap-2 p-2 rounded-lg ${
-                       isCurrentUser ? 'bg-primary-foreground/10' : 'bg-background/50'
-                     }`}>
-                       <div className="text-lg">{getFileIcon(file.file_type)}</div>
-                       <div className="flex-1 min-w-0">
-                         <p className={`font-medium text-xs truncate ${
-                           isCurrentUser ? 'text-primary-foreground' : 'text-foreground'
-                         }`}>
-                           {file.file_name}
-                         </p>
-                         <p className={`text-xs ${
-                           isCurrentUser ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                         }`}>
-                           {formatFileSize(file.file_size)}
-                         </p>
-                       </div>
-                       <a
-                         href={file.file_url}
-                         target="_blank"
-                         rel="noopener noreferrer"
-                         className={`text-xs px-2 py-1 rounded-md transition-colors ${
-                           isCurrentUser
-                             ? 'bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30'
-                             : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                         }`}
-                       >
-                         Ver
-                       </a>
-                     </div>
-                   );
-                 })}
-               </div>
-             )}
-           </div>
- 
-           <div className={`flex items-center gap-2 mt-1 text-xs text-muted-foreground ${
-             isCurrentUser ? 'flex-row-reverse' : 'flex-row'
-           }`}>
-             <span>
-               {new Date(reply.created_at).toLocaleDateString('es-ES', {
-                 day: 'numeric',
-                 month: 'short',
-                 hour: '2-digit',
-                 minute: '2-digit'
-               })}
-             </span>
-             {(user?.id === reply.author_id || profile?.role === 'admin' || profile?.role === 'formador') && (
-               <>
-                 <span>•</span>
-                 <button
-                   onClick={() => handleDeleteReply(reply.id, postId)}
-                   className="text-destructive hover:underline"
-                 >
-                   Eliminar
-                 </button>
-               </>
-             )}
-           </div>
-         </div>
-         {isCurrentUser && (
-           <Avatar className="h-8 w-8">
-             <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-               {reply.author_name?.charAt(0)?.toUpperCase() || 'U'}
-             </AvatarFallback>
-           </Avatar>
-         )}
-       </div>
-     );
-   };
+  const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin' || profile?.role === 'voluntario';
 
   useEffect(() => {
     fetchPosts();
@@ -333,7 +108,6 @@ export default function Comunidad() {
     fetchPrograms();
   }, []);
 
-  // Hook para manejar ESC en el modal
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selectedImage) {
@@ -362,7 +136,6 @@ export default function Comunidad() {
         return;
       }
 
-      // TODOS los usuarios autenticados pueden ver TODOS los posts
       const { data, error } = await supabase
         .from('forum_posts')
         .select(`
@@ -373,25 +146,26 @@ export default function Comunidad() {
           pinned,
           created_at,
           author_id,
-            forum_id,
-            profiles (
-              full_name,
-              role
-            ),
-            forum_post_likes (
-              id,
-              user_id
-            ),
-            forum_post_replies (
-              id
-            ),
-            forum_post_files (
-              id,
-              file_url,
-              file_name,
-              file_type,
-              file_size
-            )
+          forum_id,
+          profiles (
+            full_name,
+            role,
+            avatar_url
+          ),
+          forum_post_likes (
+            id,
+            user_id
+          ),
+          forum_post_replies (
+            id
+          ),
+          forum_post_files (
+            id,
+            file_url,
+            file_name,
+            file_type,
+            file_size
+          )
         `)
         .order('pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -400,26 +174,25 @@ export default function Comunidad() {
         console.error('Error fetching posts:', error);
         throw error;
       }
-      
-      // Filtrar posts que tienen autor válido (limpiar datos huérfanos)
+
       const validPosts = (data || []).filter((post: any) => post.profiles);
-      
-      // Procesar los datos para incluir conteos y estado de like
+
       const processedPosts = validPosts.map((post: any) => ({
         ...post,
         author_name: post.profiles?.full_name || 'Usuario',
         author_role: post.profiles?.role || 'student',
+        author_avatar_url: post.profiles?.avatar_url || null,
         likes_count: post.forum_post_likes?.length || 0,
         replies_count: post.forum_post_replies?.length || 0,
         is_liked: user ? post.forum_post_likes?.some((like: any) => like.user_id === user.id) : false,
         files: post.forum_post_files || []
       }));
-      
+
       setPosts(processedPosts);
     } catch (error: any) {
       console.error('Error in fetchPosts:', error);
       toast({
-        title: "Error", 
+        title: "Error",
         description: "No se pudieron cargar las publicaciones",
         variant: "destructive",
       });
@@ -435,7 +208,6 @@ export default function Comunidad() {
         return;
       }
 
-      // Obtener el rol del usuario
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
@@ -444,20 +216,19 @@ export default function Comunidad() {
 
       const userRole = profile?.role as string;
 
-      // Si es admin, formador o voluntario, mostrar TODOS los foros
       if (userRole === 'admin' || userRole === 'formador' || userRole === 'voluntario') {
-        
         const { data, error } = await supabase
-      .from('forums')
-      .select(`
-        id,
-        name,
-        description,
-        program_id,
-        programs (title)
-      `)
-      .order('name');
-    
+          .from('forums')
+          .select(`
+            id,
+            name,
+            description,
+            program_id,
+            cover_image_url,
+            programs (title)
+          `)
+          .order('name');
+
         if (error) {
           console.error('Error fetching forums:', error);
           toast({
@@ -467,14 +238,11 @@ export default function Comunidad() {
           });
           return;
         }
-    
-    setForums(data || []);
+
+        setForums(data || []);
         return;
       }
 
-      // Si es estudiante, mostrar solo foros de sus programas
-      
-      // Obtener los programas del usuario
       const { data: userPrograms, error: userProgramsError } = await supabase
         .from('enrollments')
         .select('program_id')
@@ -496,10 +264,8 @@ export default function Comunidad() {
         return;
       }
 
-      // Obtener los IDs de los programas del usuario
       const programIds = userPrograms.map(up => up.program_id);
 
-      // Cargar foros solo de los programas del usuario
       const { data, error } = await supabase
         .from('forums')
         .select(`
@@ -507,11 +273,12 @@ export default function Comunidad() {
           name,
           description,
           program_id,
+          cover_image_url,
           programs (title)
         `)
         .in('program_id', programIds)
         .order('name');
-    
+
       if (error) {
         console.error('Error fetching forums:', error);
         toast({
@@ -521,7 +288,7 @@ export default function Comunidad() {
         });
         return;
       }
-    
+
       setForums(data || []);
     } catch (error) {
       console.error('Error in fetchForums:', error);
@@ -538,67 +305,77 @@ export default function Comunidad() {
       .from('programs')
       .select('id, title')
       .order('title');
-    
+
     setPrograms(data || []);
   };
 
-  // Función para manejar cambios en archivos del componente ForumFileUpload
-  const handleFilesChange = (files: File[]) => {
-    setSelectedFiles(files);
+  const uploadForumCoverImage = async (file: File): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `forum-cover-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+      const filePath = `forum-covers/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('forum-files')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('forum-files')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading forum cover:', error);
+      return null;
+    }
   };
 
-  // Función para manejar cambios en archivos de respuestas
-  const handleReplyFilesChange = (postId: string, files: File[]) => {
-    setReplyFiles(prev => ({
-      ...prev,
-      [postId]: files
-    }));
-  };
-
-  // Subida de archivos de POST (no replies)
-  const uploadPostFiles = async (postId: string) => {
-    if (selectedFiles.length === 0) return [];
+  const uploadPostFiles = async (postId: string, files: File[]) => {
+    if (files.length === 0) return [];
 
     console.log('🔥 INICIANDO SUBIDA DE ARCHIVOS');
-    console.log('🔥 Archivos a subir:', selectedFiles.length);
+    console.log('🔥 Archivos a subir:', files.length);
     console.log('🔥 PostId:', postId);
 
     setUploadingFiles(true);
     const uploadedFiles = [];
 
     try {
-      // Verificar que el bucket existe; si no, intentar crearlo.
+      // Verificar que el bucket existe
       const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
       if (bucketsError) {
-        console.warn('No se pudieron listar buckets:', bucketsError);
+        console.warn('⚠️ No se pudieron listar buckets:', bucketsError);
       }
 
       const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
       if (!forumFilesBucket) {
-        // Intentar crear el bucket si no existe. Si falla por permisos, reportamos y abortamos.
-        console.log(`Bucket 'forum-files' no encontrado. Intentando crearlo...`);
+        console.log(`⚠️ Bucket 'forum-files' no encontrado. Intentando crearlo...`);
         const { error: createError } = await supabase.storage.createBucket('forum-files', { public: true });
         if (createError) {
-          console.error('No se pudo crear el bucket forum-files:', createError);
+          console.error('❌ No se pudo crear el bucket forum-files:', createError);
           toast({
-            title: 'Error',
-            description: 'No se pudo crear el bucket de archivos (forum-files). Revisa permisos en Supabase.',
+            title: 'Error de configuración',
+            description: 'El bucket de archivos no existe. Por favor contacta al administrador.',
             variant: 'destructive'
           });
           setUploadingFiles(false);
           return [];
         }
         console.log(`✅ Bucket 'forum-files' creado exitosamente`);
-        toast({
-          title: "✅ Bucket creado",
-          description: "El bucket 'forum-files' fue creado automáticamente",
-        });
       } else {
-        console.log("✅ Bucket 'forum-files' existe. Procediendo con la subida...");
+        console.log("✅ Bucket 'forum-files' existe");
       }
 
-      for (const file of selectedFiles) {
+      for (const file of files) {
         try {
+          console.log(`📤 Subiendo archivo: ${file.name} (${file.type}, ${file.size} bytes)`);
+
           const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
           const fileName = `forum-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
           const filePath = `forum-files/${fileName}`;
@@ -611,13 +388,19 @@ export default function Comunidad() {
               contentType: file.type
             });
 
-          if (uploadError) throw uploadError;
+          if (uploadError) {
+            console.error('❌ Error en upload:', uploadError);
+            throw uploadError;
+          }
+
+          console.log(`✅ Archivo subido a storage: ${filePath}`);
 
           const { data: { publicUrl } } = supabase.storage
             .from('forum-files')
             .getPublicUrl(filePath);
 
-          // Para posts mantenemos la inserción en DB aquí (post_id disponible)
+          console.log(`✅ URL pública generada: ${publicUrl}`);
+
           const { error: dbError } = await supabase
             .from('forum_post_files')
             .insert([{
@@ -628,7 +411,12 @@ export default function Comunidad() {
               file_size: file.size
             }]);
 
-          if (dbError) throw dbError;
+          if (dbError) {
+            console.error('❌ Error guardando en DB:', dbError);
+            throw dbError;
+          }
+
+          console.log(`✅ Metadata guardada en DB para: ${file.name}`);
 
           uploadedFiles.push({
             file_url: publicUrl,
@@ -636,107 +424,35 @@ export default function Comunidad() {
             file_type: file.type,
             file_size: file.size
           });
-        } catch (error) {
-          console.error('Error uploading file:', error);
+        } catch (error: any) {
+          console.error('❌ Error uploading file:', error);
           toast({
             title: "Error subiendo archivo",
-            description: `No se pudo subir ${file.name}`,
+            description: error?.message || `No se pudo subir ${file.name}`,
             variant: "destructive",
           });
         }
       }
-    } catch (error) {
-      console.error('Error in uploadFiles:', error);
+    } catch (error: any) {
+      console.error('❌ Error in uploadFiles:', error);
+      toast({
+        title: "Error general",
+        description: error?.message || "Error al subir archivos",
+        variant: "destructive",
+      });
     } finally {
       setUploadingFiles(false);
     }
 
+    console.log(`✅ Subida completada. ${uploadedFiles.length} de ${files.length} archivos subidos`);
     return uploadedFiles;
   };
 
-  // Función para subir archivos de respuestas
-  const uploadReplyFiles = async (postId: string) => {
-    const files = replyFiles[postId] || [];
-    if (files.length === 0) return [];
-
-    const uploadedFiles = [];
-
-    try {
-        // Verificar que el bucket existe; si no, intentar crearlo.
-        const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-        if (bucketsError) {
-          console.warn('No se pudieron listar buckets:', bucketsError);
-        }
-
-        const forumFilesBucket = buckets?.find(b => b.id === 'forum-files');
-        if (!forumFilesBucket) {
-          console.log(`Bucket 'forum-files' no encontrado. Intentando crearlo...`);
-          const { error: createError } = await supabase.storage.createBucket('forum-files', { public: true });
-          if (createError) {
-            console.error('No se pudo crear el bucket forum-files:', createError);
-            toast({
-              title: 'Error',
-              description: 'No se pudo crear el bucket de archivos (forum-files). Revisa permisos en Supabase.',
-              variant: 'destructive'
-            });
-            return [];
-          }
-          console.log(`✅ Bucket 'forum-files' creado exitosamente`);
-          toast({
-            title: "✅ Bucket creado",
-            description: "El bucket 'forum-files' fue creado automáticamente",
-          });
-        } else {
-          console.log("✅ Bucket 'forum-files' existe. Procediendo con la subida...");
-        }
-
-        for (const file of files) {
-        try {
-          const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
-          const fileName = `reply-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-          const filePath = `forum-files/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('forum-files')
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              upsert: true,
-              contentType: file.type
-            });
-
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('forum-files')
-            .getPublicUrl(filePath);
-
-          uploadedFiles.push({
-            file_url: publicUrl,
-            file_name: file.name,
-            file_type: file.type,
-            file_size: file.size
-          });
-        } catch (error) {
-          console.error('Error uploading reply file:', error);
-          toast({
-            title: "Error subiendo archivo",
-            description: `No se pudo subir ${file.name}`,
-            variant: "destructive",
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error in uploadReplyFiles:', error);
-    }
-
-    return uploadedFiles;
-  };
-
-  const handleCreatePost = async () => {
-    if (!newPost.title.trim() || !newPost.content.trim()) {
+  const handleQuickPost = async () => {
+    if (!quickPostContent.trim()) {
       toast({
         title: "Error",
-        description: "Título y contenido son obligatorios",
+        description: "Escribe algo para publicar",
         variant: "destructive",
       });
       return;
@@ -753,10 +469,10 @@ export default function Comunidad() {
 
     try {
       const postData = {
-        title: newPost.title.trim(),
-        content: newPost.content.trim(),
-        category: newPost.category || null,
-        forum_id: newPost.forum_id === 'none' ? null : newPost.forum_id || null,
+        title: quickPostContent.substring(0, 100),
+        content: quickPostContent.trim(),
+        category: 'general',
+        forum_id: selectedForumId || null,
         author_id: user.id,
         pinned: false
       };
@@ -771,24 +487,18 @@ export default function Comunidad() {
         throw error;
       }
 
-      if (selectedFiles.length > 0) {
-        await uploadPostFiles(data[0].id);
+      if (quickPostFiles.length > 0) {
+        await uploadPostFiles(data[0].id, quickPostFiles);
       }
-
-      // Mostrar el foro asociado en el toast si existe
-      const forumName = newPost.forum_id ? 
-        forums.find(f => f.id === newPost.forum_id)?.name : null;
 
       toast({
         title: "Publicación creada",
-        description: forumName ? 
-          `Tu publicación en "${forumName}" ha sido creada` :
-          "Tu publicación ha sido creada exitosamente",
+        description: "Tu publicación ha sido creada exitosamente",
       });
 
-      setNewPost({ title: '', content: '', category: '', forum_id: '' });
-      setSelectedFiles([]);
-      setShowCreateDialog(false);
+      setQuickPostContent('');
+      setQuickPostFiles([]);
+      setShowQuickPostDialog(false);
       fetchPosts();
     } catch (error: any) {
       console.error('Full error:', error);
@@ -811,11 +521,17 @@ export default function Comunidad() {
     }
 
     try {
-      // Crear un foro por cada programa seleccionado
+      let coverImageUrl: string | null = null;
+
+      if (newForum.cover_image) {
+        coverImageUrl = await uploadForumCoverImage(newForum.cover_image);
+      }
+
       const forumsToCreate = newForum.program_ids.map(program_id => ({
-          name: newForum.name.trim(),
-          description: newForum.description.trim() || null,
-        program_id: program_id
+        name: newForum.name.trim(),
+        description: newForum.description.trim() || null,
+        program_id: program_id,
+        cover_image_url: coverImageUrl
       }));
 
       const { error } = await supabase
@@ -829,7 +545,7 @@ export default function Comunidad() {
         description: `El foro "${newForum.name}" ha sido creado para ${newForum.program_ids.length} programa(s)`,
       });
 
-      setNewForum({ name: '', description: '', program_ids: [] });
+      setNewForum({ name: '', description: '', program_ids: [], cover_image: null });
       setShowCreateForumDialog(false);
       fetchForums();
     } catch (error: any) {
@@ -846,7 +562,8 @@ export default function Comunidad() {
     setNewForum({
       name: forum.name,
       description: forum.description || '',
-      program_ids: [forum.program_id]
+      program_ids: [forum.program_id],
+      cover_image: null
     });
     setShowEditForum(true);
   };
@@ -862,13 +579,22 @@ export default function Comunidad() {
     }
 
     try {
+      let updateData: any = {
+        name: newForum.name.trim(),
+        description: newForum.description.trim() || null,
+        program_id: newForum.program_ids[0]
+      };
+
+      if (newForum.cover_image) {
+        const coverImageUrl = await uploadForumCoverImage(newForum.cover_image);
+        if (coverImageUrl) {
+          updateData.cover_image_url = coverImageUrl;
+        }
+      }
+
       const { error } = await supabase
         .from('forums')
-        .update({
-          name: newForum.name.trim(),
-          description: newForum.description.trim() || null,
-          program_id: newForum.program_ids[0]
-        })
+        .update(updateData)
         .eq('id', editingForum.id);
 
       if (error) throw error;
@@ -878,7 +604,7 @@ export default function Comunidad() {
         description: `El foro "${newForum.name}" ha sido actualizado exitosamente`,
       });
 
-      setNewForum({ name: '', description: '', program_ids: [] });
+      setNewForum({ name: '', description: '', program_ids: [], cover_image: null });
       setEditingForum(null);
       setShowEditForum(false);
       fetchForums();
@@ -891,14 +617,12 @@ export default function Comunidad() {
     }
   };
 
-
   const handleDeleteForum = async (forum: Forum) => {
     if (!confirm(`¿Estás seguro de que quieres eliminar el foro "${forum.name}"? Esta acción eliminará también todos los posts del foro y no se puede deshacer.`)) {
       return;
     }
 
     try {
-      // 1. Primero eliminar todos los posts del foro (esto eliminará automáticamente likes, replies y files por CASCADE)
       const { error: postsError } = await supabase
         .from('forum_posts')
         .delete()
@@ -906,7 +630,6 @@ export default function Comunidad() {
 
       if (postsError) throw postsError;
 
-      // 2. Luego eliminar el foro
       const { error: forumError } = await supabase
         .from('forums')
         .delete()
@@ -919,7 +642,6 @@ export default function Comunidad() {
         description: `El foro "${forum.name}" y todos sus posts han sido eliminados exitosamente`,
       });
 
-      // Actualizar las listas
       fetchForums();
       fetchPosts();
     } catch (error: any) {
@@ -932,30 +654,24 @@ export default function Comunidad() {
     }
   };
 
-  // Eliminar publicación y sus archivos en Storage (post files + reply files)
   const handleDeletePost = async (post: ForumPost) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta publicación? Esta acción no se puede deshacer.')) {
       return;
     }
 
     try {
-      // La base de datos está configurada para eliminar en cascada:
-      // - Al borrar un post, se borran sus likes, replies y post_files.
-      // - Al borrar un reply, se borran sus reply_files.
-      // - Un trigger en la DB se encarga de borrar los archivos de Storage.
       const { error: deleteError } = await supabase
         .from('forum_posts')
         .delete()
         .eq('id', post.id);
 
       if (deleteError) throw deleteError;
-      
+
       toast({
         title: 'Publicación eliminada',
         description: 'La publicación y todo su contenido asociado han sido eliminados.',
       });
 
-      // Actualizar la UI
       fetchPosts();
       fetchForums();
     } catch (error: any) {
@@ -968,62 +684,6 @@ export default function Comunidad() {
     }
   };
 
-  // Eliminar una respuesta individual y sus archivos en Storage
-  const handleDeleteReply = async (replyId: string, postId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta respuesta?')) {
-      return;
-    }
-    
-    deleteReplyMutation.mutate({ replyId, postId });
-  };
-
-  // React Query mutation: borrar reply y luego invalidar query 'posts'
-  const queryClient = (() => {
-    try {
-      return useQueryClient();
-    } catch (e) {
-      return null as any;
-    }
-  })();
-
-  const deleteReplyMutation = useMutation({
-    mutationFn: async ({ replyId, postId }: { replyId: string, postId: string }) => {
-      // Primero obtener y eliminar archivos (igual que en handleDeleteReply)
-      const { data: filesData } = await supabase
-        .from('forum_reply_files' as any)
-        .select('file_url')
-        .eq('reply_id', replyId);
-
-      if (filesData && filesData.length > 0) {
-        const filePaths = filesData.map((file: any) => {
-          const urlParts = file.file_url.split('/');
-          return urlParts.slice(urlParts.indexOf('forum-files') + 1).join('/');
-        });
-        const { error: removeError } = await supabase.storage.from('forum-files').remove(filePaths);
-        if (removeError) throw removeError;
-      }
-
-      const { error: deleteError } = await supabase
-        .from('forum_post_replies')
-        .delete()
-        .eq('id', replyId);
-
-      if (deleteError) throw deleteError;
-    },
-    onSuccess: (_, variables) => {
-      toast({ title: 'Éxito', description: 'La respuesta ha sido eliminada.' });
-      // Refrescar las respuestas del post específico y la lista de posts
-      fetchReplies(variables.postId);
-      fetchPosts();
-    },
-    onError: (error: any) => {
-      // Si falla, el estado no se tocó, solo mostramos el error
-      toast({ title: 'Error', description: error?.message || 'No se pudo eliminar la respuesta.', variant: 'destructive' });
-    }
-  });
-
-
-
   const handleLikePost = async (postId: string) => {
     if (!user) {
       toast({
@@ -1035,7 +695,6 @@ export default function Comunidad() {
     }
 
     try {
-      // Verificar si ya le dio like
       const { data: existingLike } = await supabase
         .from('forum_post_likes')
         .select('id')
@@ -1044,22 +703,20 @@ export default function Comunidad() {
         .single();
 
       if (existingLike) {
-        // Quitar like
         const { error } = await supabase
           .from('forum_post_likes')
           .delete()
           .eq('id', existingLike.id);
-        
+
         if (error) throw error;
       } else {
-        // Agregar like
         const { error } = await supabase
           .from('forum_post_likes')
           .insert([{
             post_id: postId,
             user_id: user.id
           }]);
-        
+
         if (error) throw error;
       }
 
@@ -1076,8 +733,6 @@ export default function Comunidad() {
 
   const fetchReplies = async (postId: string) => {
     try {
-      
-      // Primero obtener las respuestas
       const { data, error } = await supabase
         .from('forum_post_replies')
         .select(`
@@ -1087,45 +742,43 @@ export default function Comunidad() {
           author_id,
           profiles!forum_post_replies_author_id_fkey (
             full_name,
-            role
+            role,
+            avatar_url
           )
         `)
         .eq('post_id', postId)
         .order('created_at', { ascending: true });
 
-
       if (error) throw error;
 
-      // Filtrar comentarios que tienen autor válido
       const validReplies = (data || []).filter((reply: any) => reply.profiles);
-      
+
       if (validReplies.length === 0) {
         setReplies(prev => ({ ...prev, [postId]: [] }));
         return;
       }
 
-      // Obtener los archivos por separado
       const replyIds = validReplies.map((r: any) => r.id);
-      
+
       const { data: filesData, error: filesError } = await supabase
         .from('forum_reply_files' as any)
         .select('*')
         .in('reply_id', replyIds);
 
-
       if (filesError) {
         console.error('Error fetching files:', filesError);
       }
 
-      // Combinar respuestas con sus archivos
       const processedReplies = validReplies.map((reply: any) => {
         const replyFiles = filesData?.filter((f: any) => f.reply_id === reply.id) || [];
-        
+
         return {
           id: reply.id,
           content: reply.content,
-        author_name: reply.profiles?.full_name || 'Usuario',
-        author_role: reply.profiles?.role || 'student',
+          author_name: reply.profiles?.full_name || 'Usuario',
+          author_role: reply.profiles?.role || 'student',
+          author_avatar_url: reply.profiles?.avatar_url || null,
+          author_id: reply.author_id,
           created_at: reply.created_at,
           files: replyFiles.map((f: any) => ({
             id: f.id,
@@ -1137,35 +790,17 @@ export default function Comunidad() {
         };
       });
 
-
       setReplies(prev => ({
         ...prev,
         [postId]: processedReplies
       }));
     } catch (error: any) {
-      console.error('❌ fetchReplies error:', error);
+      console.error('Error fetching replies:', error);
       toast({
         title: "Error",
         description: "No se pudieron cargar los comentarios",
         variant: "destructive",
       });
-    }
-  };
-
-  // Función de debug para verificar archivos en DB
-  const debugReplyFiles = async (replyId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('forum_reply_files' as any)
-        .select('*')
-        .eq('reply_id', replyId);
-        
-      console.log('🔍 Debug - Archivos en DB para reply', replyId, ':', data);
-      if (error) console.error('🔍 Debug - Error:', error);
-      return data;
-    } catch (error) {
-      console.error('🔍 Debug - Error en debugReplyFiles:', error);
-      return null;
     }
   };
 
@@ -1190,7 +825,6 @@ export default function Comunidad() {
     }
 
     try {
-      // 1. Crear la respuesta primero
       const { data: replyData, error: replyError } = await supabase
         .from('forum_post_replies')
         .insert([{
@@ -1202,72 +836,29 @@ export default function Comunidad() {
         .single();
 
       if (replyError) {
-        console.error('❌ Error creando reply:', replyError);
+        console.error('Error creating reply:', replyError);
         throw replyError;
       }
 
-      // 2. Subir archivos si hay alguno
       const files = replyFiles[postId] || [];
-      
+
       if (files.length > 0) {
-        try {
-          // Asegúrate de que files sea un array de File objects
-          const filesArray = Array.isArray(files) ? files : [];
-
-          // Subir archivos a Storage y obtener metadatos
-          const uploadedFiles = await uploadReplyFiles(postId);
-
-          // Insertar metadatos en DB (forum_reply_files) asociándolos al reply creado
-          for (const f of uploadedFiles) {
-            try {
-              const { error: insertError } = await supabase
-                .from('forum_reply_files' as any)
-                .insert([{
-                  reply_id: replyData.id,
-                  file_url: f.file_url,
-                  file_name: f.file_name,
-                  file_type: f.file_type,
-                  file_size: f.file_size
-                }]);
-
-              if (insertError) throw insertError;
-            } catch (err) {
-              console.error('Error inserting reply file metadata:', err);
-              // Continuar con el siguiente archivo, pero notificar
-              toast({
-                title: 'Error',
-                description: `No se pudo guardar metadata de ${f.file_name}`,
-                variant: 'destructive'
-              });
-            }
-          }
-
-        } catch (error) {
-          console.error('❌ Error subiendo archivos:', error);
-          toast({
-            title: "Error",
-            description: "Error subiendo archivos",
-            variant: "destructive",
-          });
-        }
+        await uploadPostFiles(replyData.id, files);
       }
 
-      // 3. Limpiar formularios
       setNewReply(prev => ({
         ...prev,
         [postId]: ''
       }));
 
-      // Limpiar archivos de la respuesta
       setReplyFiles(prev => ({
         ...prev,
         [postId]: []
       }));
 
-      // 4. Actualizar comentarios y conteo de posts
       await fetchReplies(postId);
       fetchPosts();
-      
+
       toast({
         title: "Comentario agregado",
         description: "Tu comentario ha sido publicado",
@@ -1281,156 +872,65 @@ export default function Comunidad() {
     }
   };
 
+  const handleDeleteReply = async (replyId: string, postId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta respuesta?')) {
+      return;
+    }
+
+    try {
+      const { data: filesData } = await supabase
+        .from('forum_reply_files' as any)
+        .select('file_url')
+        .eq('reply_id', replyId);
+
+      if (filesData && filesData.length > 0) {
+        const filePaths = filesData.map((file: any) => {
+          const urlParts = file.file_url.split('/');
+          return urlParts.slice(urlParts.indexOf('forum-files') + 1).join('/');
+        });
+        const { error: removeError } = await supabase.storage.from('forum-files').remove(filePaths);
+        if (removeError) throw removeError;
+      }
+
+      const { error: deleteError } = await supabase
+        .from('forum_post_replies')
+        .delete()
+        .eq('id', replyId);
+
+      if (deleteError) throw deleteError;
+
+      toast({ title: 'Éxito', description: 'La respuesta ha sido eliminada.' });
+
+      fetchReplies(postId);
+      fetchPosts();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error?.message || 'No se pudo eliminar la respuesta.', variant: 'destructive' });
+    }
+  };
+
   const toggleReplies = (postId: string) => {
     setShowReplies(prev => ({
       ...prev,
       [postId]: !prev[postId]
     }));
 
-    // Cargar comentarios si no están cargados
     if (!replies[postId]) {
       fetchReplies(postId);
     }
   };
 
-  // Función para agregar respuesta anidada
-  const handleAddNestedReply = async (parentReplyId: string, content: string, files: File[] = []) => {
-    if (!user || !content.trim()) return;
-    
-    setIsSubmitting(true);
-    
-    try {
-      console.log('🚀 handleAddNestedReply - INICIO');
-      console.log('🚀 parentReplyId:', parentReplyId);
-      console.log('🚀 content:', content);
-      console.log('🚀 files:', files.length);
-
-      // Crear la respuesta anidada
-      const { data: replyData, error: replyError } = await supabase
-        .from('forum_nested_replies' as any)
-        .insert({
-          parent_reply_id: parentReplyId,
-          content: content.trim(),
-          author_id: user.id
-        })
-        .select()
-        .single();
-
-      if (replyError) throw replyError;
-
-      // Verificar que replyData no sea un error
-      if (!replyData) throw new Error('No se pudo crear la respuesta anidada');
-
-      // Declarar replyData como any para evitar errores de tipos
-      const reply = replyData as any;
-
-      // Subir archivos si existen
-      let uploadedFiles: any[] = [];
-      if (files && files.length > 0) {
-        uploadedFiles = await uploadNestedFiles(files, reply.id);
-      }
-
-      // Actualizar estado local
-      const newNestedReply = {
-        id: reply.id,
-        content: reply.content,
-        created_at: reply.created_at,
-        author_id: reply.author_id,
-        author_name: (user as any).full_name || 'Usuario',
-        author_role: (user as any).role || 'student',
-        files: uploadedFiles
-      };
-
-      setReplies(prev => ({
-        ...prev,
-        [`nested_${parentReplyId}`]: [...(prev[`nested_${parentReplyId}`] || []), newNestedReply]
-      }));
-
-      // Limpiar formulario
-      setNestedReplyContent(prev => ({
-        ...prev,
-        [parentReplyId]: ''
-      }));
-      setNestedReplyFiles(prev => ({
-        ...prev,
-        [parentReplyId]: []
-      }));
-      setShowNestedForm(null);
-
-      toast({
-        title: "Éxito",
-        description: "Respuesta agregada correctamente",
-      });
-
-    } catch (error) {
-      console.error('Error adding nested reply:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo agregar la respuesta",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Función para cargar respuestas anidadas
-  const fetchNestedReplies = async (parentReplyId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('forum_nested_replies' as any)
-        .select(`
-          id,
-          content,
-          created_at,
-          author_id,
-          profiles (
-            full_name,
-            role
-          ),
-          forum_nested_reply_files (
-            id,
-            file_url,
-            file_name,
-            file_type,
-            file_size
-          )
-        `)
-        .eq('parent_reply_id', parentReplyId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      const processedReplies = (data || []).map((reply: any) => ({
-        ...reply,
-        author_name: reply.profiles?.full_name || 'Usuario',
-        author_role: reply.profiles?.role || 'student',
-        files: reply.forum_nested_reply_files || []
-      }));
-
-      setReplies(prev => ({
-        ...prev,
-        [`nested_${parentReplyId}`]: processedReplies
-      }));
-    } catch (error) {
-      console.error('Error fetching nested replies:', error);
-    }
-  };
-
   const filteredPosts = posts.filter(post => {
-    // Filtrar posts huérfanos (sin autor válido)
     if (!post.author_name || post.author_name === 'Sin nombre') {
       return false;
     }
-    
+
     const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          post.content.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'todos' || post.category === filterCategory;
     const matchesForum = !selectedForumId || post.forum_id === selectedForumId;
-    
+
     return matchesSearch && matchesCategory && matchesForum;
   });
-
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
@@ -1458,272 +958,181 @@ export default function Comunidad() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Comunidad</h1>
-          <p className="text-muted-foreground">
-            Conecta con otros estudiantes y profesores
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Dialog open={showCreateForumDialog} onOpenChange={setShowCreateForumDialog}>
-            {isTeacherOrAdmin && (
+    <div className="min-h-screen bg-muted/30">
+      <div className="max-w-5xl mx-auto py-6 px-4 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Comunidad</h1>
+            <p className="text-muted-foreground">
+              Conecta con otros estudiantes y profesores
+            </p>
+          </div>
+          {isTeacherOrAdmin && (
+            <Dialog open={showCreateForumDialog} onOpenChange={setShowCreateForumDialog}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Crear Foro
+                  <Settings className="h-4 w-4" />
+                  Gestionar Foros
                 </Button>
               </DialogTrigger>
-            )}
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Crear Nuevo Foro</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="forumName">Nombre del Foro</Label>
-                  <Input
-                    id="forumName"
-                    value={newForum.name}
-                    onChange={(e) => setNewForum({ ...newForum, name: e.target.value })}
-                    placeholder="Nombre del foro"
-                  />
-                </div>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Crear Nuevo Foro</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="forumName">Nombre del Foro</Label>
+                    <Input
+                      id="forumName"
+                      value={newForum.name}
+                      onChange={(e) => setNewForum({ ...newForum, name: e.target.value })}
+                      placeholder="Nombre del foro"
+                    />
+                  </div>
 
-                <div>
-                  <Label htmlFor="forumDescription">Descripción</Label>
-                  <Textarea
-                    id="forumDescription"
-                    value={newForum.description}
-                    onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
-                    placeholder="Descripción del foro"
-                    rows={3}
-                    className="min-h-[80px]"
-                  />
-                </div>
+                  <div>
+                    <Label htmlFor="forumDescription">Descripción</Label>
+                    <Textarea
+                      id="forumDescription"
+                      value={newForum.description}
+                      onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
+                      placeholder="Descripción del foro"
+                      rows={3}
+                    />
+                  </div>
 
-                <div>
-                  <Label>Programas</Label>
-                  <div className="space-y-2 mt-2">
+                  <div>
+                    <Label htmlFor="forumCoverImage">Imagen de Portada</Label>
+                    <Input
+                      id="forumCoverImage"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setNewForum({ ...newForum, cover_image: file });
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Programas</Label>
+                    <div className="space-y-2 mt-2">
                       {programs.map(program => (
-                      <div key={program.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`create-program-${program.id}`}
-                          checked={newForum.program_ids.includes(program.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setNewForum({
-                                ...newForum,
-                                program_ids: [...newForum.program_ids, program.id]
-                              });
-                            } else {
-                              setNewForum({
-                                ...newForum,
-                                program_ids: newForum.program_ids.filter(id => id !== program.id)
-                              });
-                            }
-                          }}
-                        />
-                        <Label htmlFor={`create-program-${program.id}`} className="text-sm font-normal">
-                          {program.title}
-                        </Label>
-                      </div>
+                        <div key={program.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`create-program-${program.id}`}
+                            checked={newForum.program_ids.includes(program.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setNewForum({
+                                  ...newForum,
+                                  program_ids: [...newForum.program_ids, program.id]
+                                });
+                              } else {
+                                setNewForum({
+                                  ...newForum,
+                                  program_ids: newForum.program_ids.filter(id => id !== program.id)
+                                });
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`create-program-${program.id}`} className="text-sm font-normal">
+                            {program.title}
+                          </Label>
+                        </div>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={handleCreateForum} className="flex-1">
+                      Crear Foro
+                    </Button>
+                    <Button variant="outline" onClick={() => setShowCreateForumDialog(false)}>
+                      Cancelar
+                    </Button>
                   </div>
                 </div>
-
-                <div className="flex gap-2">
-                  <Button onClick={handleCreateForum} className="flex-1">
-                    Crear Foro
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowCreateForumDialog(false)}>
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Nueva Publicación
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Crear Nueva Publicación</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="title">Título</Label>
-                  <Input
-                    id="title"
-                    value={newPost.title}
-                    onChange={(e) => setNewPost({ ...newPost, title: e.target.value })}
-                    placeholder="Título de tu publicación"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="category">Categoría</Label>
-                  <Select value={newPost.category} onValueChange={(value) => setNewPost({ ...newPost, category: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar categoría" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="general">General</SelectItem>
-                      <SelectItem value="pregunta">Pregunta</SelectItem>
-                      <SelectItem value="discusion">Discusión</SelectItem>
-                      <SelectItem value="anuncio">Anuncio</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="forum">Foro</Label>
-                  <Select value={newPost.forum_id} onValueChange={(value) => setNewPost({ ...newPost, forum_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="¿En qué foro quieres publicar?" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">General (sin foro específico)</SelectItem>
-                      {forums.map(forum => (
-                        <SelectItem key={forum.id} value={forum.id}>
-                          {forum.name} - {forum.program?.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="content">Contenido</Label>
-                  <Textarea
-                    id="content"
-                    value={newPost.content}
-                    onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-                    placeholder="Comparte tus ideas, preguntas o comentarios..."
-                    rows={5}
-                    className="min-h-[80px]"
-                  />
-                </div>
-
-                <div>
-                  <ForumFileUpload
-                    onFilesChange={handleFilesChange}
-                    maxFiles={5}
-                    maxSizePerFile={10}
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={handleCreatePost} 
-                    className="flex-1"
-                    disabled={uploadingFiles}
-                  >
-                    {uploadingFiles ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Subiendo archivos...
-                      </>
-                    ) : (
-                      'Publicar'
-                    )}
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
-      </div>
 
-      {/* Foros existentes y sus publicaciones */}
-      {forums.length > 0 && (
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground mb-4">Foros Activos</h2>
+        {/* Forums Grid - Facebook Style */}
+        {forums.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold text-foreground mb-4">Foros Activos</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {forums.map(forum => {
                 const forumPosts = posts.filter(post => post.forum_id === forum.id);
                 const totalPosts = forumPosts.length;
                 return (
-                  <Card key={forum.id} className={`border hover:shadow-md transition-all cursor-pointer ${
-                    selectedForumId === forum.id ? 'border-accent bg-accent/5' : ''
-                  }`}>
+                  <Card
+                    key={forum.id}
+                    className={`overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
+                      selectedForumId === forum.id ? 'border-primary shadow-lg' : 'border-transparent'
+                    }`}
+                    onClick={() => {
+                      if (selectedForumId === forum.id) {
+                        setSelectedForumId(null);
+                      } else {
+                        setSelectedForumId(forum.id);
+                      }
+                    }}
+                  >
+                    {/* Cover Image */}
+                    <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 relative">
+                      {forum.cover_image_url ? (
+                        <img
+                          src={forum.cover_image_url}
+                          alt={forum.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <MessageSquare className="h-12 w-12 text-white/50" />
+                        </div>
+                      )}
+                    </div>
+
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-semibold text-foreground">{forum.name}</h4>
-                        <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                            {totalPosts} {totalPosts === 1 ? 'post' : 'posts'}
-                        </Badge>
-                          {isTeacherOrAdmin && (
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditForum(forum);
-                                }}
-                                className="h-6 w-6 p-0"
-                              >
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteForum(forum);
-                                }}
-                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
+                        <h3 className="font-bold text-lg text-foreground">{forum.name}</h3>
+                        {isTeacherOrAdmin && (
+                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEditForum(forum)}
+                              className="h-7 w-7 p-0"
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteForum(forum)}
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       {forum.description && (
-                        <p className="text-sm text-muted-foreground mb-2">{forum.description}</p>
+                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{forum.description}</p>
                       )}
                       <div className="flex items-center justify-between">
                         <Badge variant="outline" className="text-xs">
                           {forum.program?.title}
                         </Badge>
-                        <Button 
-                          size="sm" 
-                          variant={selectedForumId === forum.id ? "default" : "ghost"}
-                          className="text-xs"
-                          onClick={() => {
-                            if (selectedForumId === forum.id) {
-                              setSelectedForumId(null);
-                              toast({
-                                title: "Vista general",
-                                description: "Mostrando todas las publicaciones",
-                              });
-                            } else {
-                              setSelectedForumId(forum.id);
-                              setSearchTerm('');
-                              setFilterCategory('todos');
-                              toast({
-                                title: "Foro seleccionado",
-                                description: `Mostrando mensajes de: ${forum.name}`,
-                              });
-                            }
-                          }}
-                        >
-                          {selectedForumId === forum.id ? 'Ocultar mensajes' : 'Ver mensajes'}
-                        </Button>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <MessageSquare className="h-3 w-3" />
+                          <span>{totalPosts} posts</span>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -1731,389 +1140,501 @@ export default function Comunidad() {
               })}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar publicaciones..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
-                <SelectItem value="general">General</SelectItem>
-                <SelectItem value="pregunta">Preguntas</SelectItem>
-                <SelectItem value="discusion">Discusiones</SelectItem>
-                <SelectItem value="anuncio">Anuncios</SelectItem>
-              </SelectContent>
-            </Select>
-            {selectedForumId && (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  setSelectedForumId(null);
-                  toast({
-                    title: "Filtro removido",
-                    description: "Mostrando todas las publicaciones",
-                  });
-                }}
-              >
-                Mostrar todos
-              </Button>
-            )}
-          </div>
-          {selectedForumId && (
-            <div className="mt-2">
-              <Badge variant="secondary">
-                Mostrando: {forums.find(f => f.id === selectedForumId)?.name || 'Foro seleccionado'}
-              </Badge>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Lista de Publicaciones */}
-      <div className="space-y-4">
-        {filteredPosts.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">
-                {forums.length === 0 ? 'No tienes acceso a foros' : 'No hay publicaciones'}
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                {forums.length === 0 
-                  ? 'No estás inscrito en ningún programa o no hay foros disponibles para tus programas. Contacta al administrador para obtener acceso.'
-                  : searchTerm || filterCategory !== 'todos' 
-                  ? 'No se encontraron publicaciones con los filtros actuales'
-                  : 'Sé el primero en crear una publicación en la comunidad'
-                }
-              </p>
-              {!searchTerm && filterCategory === 'todos' && (
-                <Button onClick={() => setShowCreateDialog(true)}>
-                  Crear Publicación
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          filteredPosts.map(post => (
-            <Card key={post.id} className={post.pinned ? "border-accent" : ""}>
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback className="bg-accent text-accent-foreground">
-                      AU
-                    </AvatarFallback>
-                  </Avatar>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {post.pinned && (
-                          <Pin className="h-4 w-4 text-accent" />
-                        )}
-                        <h3 className="font-semibold text-foreground line-clamp-1">
-                          {post.title}
-                        </h3>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
-                        <span>{formatDate(post.created_at)}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-sm text-muted-foreground">
-                        por {post.author_name || 'Usuario'}
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {post.author_role === 'teacher' ? 'Profesor' : 
-                         post.author_role === 'admin' ? 'Admin' : 'Estudiante'}
-                      </Badge>
-                      {post.category && (
-                        <Badge variant="secondary" className="text-xs">
-                          {post.category}
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <p className="text-foreground mb-4 line-clamp-3">
-                      {post.content}
-                    </p>
-                    
-                    {/* Mostrar archivos adjuntos (usar mismo componente visual que las respuestas) */}
-                    {post.files && post.files.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-sm font-medium text-muted-foreground mb-2">Archivos adjuntos:</p>
-                        <div className="flex flex-wrap gap-3">
-                          {post.files.map((file: ForumPostFile) => (
-                            <EnhancedFileAttachment
-                              key={file.id}
-                              file={file}
-                              onImageClick={setSelectedImage}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center gap-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleLikePost(post.id)}
-                        className={`gap-1 ${post.is_liked ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}
-                      >
-                        <Heart className={`h-4 w-4 ${post.is_liked ? 'fill-current' : ''}`} />
-                        <span>{post.likes_count || 0}</span>
-                      </Button>
-                      
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleReplies(post.id)}
-                        className="gap-1 text-muted-foreground hover:text-foreground"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                        <span>{post.replies_count || 0}</span>
-                      </Button>
-                      {(post.author_id === user?.id || isTeacherOrAdmin) && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeletePost(post)}
-                          className="gap-1"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Eliminar
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+        {/* Quick Post Box - Facebook Style */}
+        <Card className="sticky top-4 z-10 shadow-md">
+          <CardContent className="p-4">
+            <div className="flex gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || 'Usuario'} />
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  {profile?.full_name?.charAt(0)?.toUpperCase() || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <div
+                  className="bg-muted hover:bg-muted/80 rounded-full px-4 py-2.5 cursor-text transition-colors"
+                  onClick={() => setShowQuickPostDialog(true)}
+                >
+                  <p className="text-muted-foreground">
+                    ¿Qué estás pensando, {profile?.full_name?.split(' ')[0] || 'Usuario'}?
+                  </p>
                 </div>
-              </CardContent>
-              
-              {/* Sección de comentarios */}
-                <div className="border-t bg-muted/30 p-4">
-                {/* Botón para mostrar/ocultar respuestas */}
-                <div className="flex items-center justify-between mb-4">
+              </div>
+            </div>
+
+            <div className="border-t mt-3 pt-3 flex items-center justify-around">
+              <Button
+                variant="ghost"
+                className="flex-1 gap-2 text-muted-foreground hover:bg-muted"
+                onClick={() => setShowQuickPostDialog(true)}
+              >
+                <ImageIcon className="h-5 w-5 text-green-500" />
+                Foto/Video
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex-1 gap-2 text-muted-foreground hover:bg-muted"
+                onClick={() => setShowQuickPostDialog(true)}
+              >
+                <Smile className="h-5 w-5 text-yellow-500" />
+                Sentimiento
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Quick Post Dialog */}
+        <Dialog open={showQuickPostDialog} onOpenChange={setShowQuickPostDialog}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Crear publicación</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || 'Usuario'} />
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    {profile?.full_name?.charAt(0)?.toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold text-foreground">{profile?.full_name || 'Usuario'}</p>
+                  <Select value={selectedForumId || 'general'} onValueChange={(value) => setSelectedForumId(value === 'general' ? null : value)}>
+                    <SelectTrigger className="w-48 h-7 text-xs border-none bg-muted">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">Público</SelectItem>
+                      {forums.map(forum => (
+                        <SelectItem key={forum.id} value={forum.id}>
+                          {forum.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Textarea
+                placeholder={`¿Qué estás pensando, ${profile?.full_name?.split(' ')[0] || 'Usuario'}?`}
+                value={quickPostContent}
+                onChange={(e) => setQuickPostContent(e.target.value)}
+                className="min-h-[120px] border-none text-lg focus-visible:ring-0 resize-none"
+              />
+
+              {quickPostFiles.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  {quickPostFiles.map((file, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={`Preview ${index}`}
+                        className="w-full h-32 object-cover rounded-lg"
+                      />
+                      <button
+                        onClick={() => setQuickPostFiles(prev => prev.filter((_, i) => i !== index))}
+                        className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md hover:bg-gray-100"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="border rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Agregar a tu publicación</span>
+                </div>
+                <div className="flex items-center gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => toggleReplies(post.id)}
-                    className="gap-1 text-muted-foreground hover:text-foreground"
+                    className="flex-1"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'image/*,video/*';
+                      input.multiple = true;
+                      input.onchange = (e: any) => {
+                        const files = Array.from(e.target.files || []) as File[];
+                        setQuickPostFiles(prev => [...prev, ...files]);
+                      };
+                      input.click();
+                    }}
                   >
-                    <MessageCircle className="h-4 w-4" />
-                    <span>{post.replies_count || 0} respuestas</span>
-                    {showReplies[post.id] ? (
-                      <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    )}
+                    <ImageIcon className="h-5 w-5 text-green-500" />
                   </Button>
-                                    </div>
+                </div>
+              </div>
 
-                {/* Lista de comentarios con estilo chat - Solo se muestra si showReplies está activo */}
-                {showReplies[post.id] && replies[post.id] && replies[post.id].length > 0 && (
-                  <div className="space-y-4 mb-6">
-                    <h4 className="font-medium text-sm text-muted-foreground px-4">
-                      {replies[post.id].length} respuesta{replies[post.id].length !== 1 ? 's' : ''}
-                    </h4>
-                    
-                    <div className="space-y-4">
-                      {replies[post.id].map((reply: any) => (
-                        <ReplyComponent 
-                          key={reply.id} 
-                          reply={reply} 
-                          postId={post.id}
-                          currentUserId={user?.id || ''}
-                          handleDeleteReply={handleDeleteReply}
-                          setSelectedImage={setSelectedImage}
-                        />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                    
-                {/* Formulario para nuevo comentario - SIEMPRE VISIBLE */}
-                <div className="border-t pt-4">
-                    <div className="flex gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-accent text-accent-foreground text-xs">
-                          {profile?.full_name?.charAt(0) || 'U'}
+              <Button
+                onClick={handleQuickPost}
+                className="w-full"
+                disabled={!quickPostContent.trim() || uploadingFiles}
+              >
+                {uploadingFiles ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Publicando...
+                  </>
+                ) : (
+                  'Publicar'
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Filters */}
+        {selectedForumId && (
+          <div className="flex items-center justify-between">
+            <Badge variant="secondary" className="text-sm">
+              Mostrando: {forums.find(f => f.id === selectedForumId)?.name || 'Foro seleccionado'}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedForumId(null)}
+            >
+              Mostrar todos
+            </Button>
+          </div>
+        )}
+
+        {/* Posts Feed - Facebook Style */}
+        <div className="space-y-4">
+          {filteredPosts.length === 0 ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                <h3 className="text-xl font-medium text-foreground mb-2">
+                  {forums.length === 0 ? 'No tienes acceso a foros' : 'No hay publicaciones'}
+                </h3>
+                <p className="text-muted-foreground mb-6">
+                  {forums.length === 0
+                    ? 'No estás inscrito en ningún programa o no hay foros disponibles.'
+                    : 'Sé el primero en crear una publicación en la comunidad'
+                  }
+                </p>
+                {forums.length > 0 && (
+                  <Button onClick={() => setShowQuickPostDialog(true)} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Crear Publicación
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            filteredPosts.map(post => (
+              <Card key={post.id} className="overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-0">
+                  {/* Post Header */}
+                  <div className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={post.author_avatar_url || undefined} alt={post.author_name || 'Usuario'} />
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          {getInitials(post.author_name || 'U')}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 space-y-2">
-                        <Textarea
-                          placeholder="Escribe un comentario..."
-                          value={newReply[post.id] || ''}
-                          onChange={(e) => setNewReply(prev => ({
-                            ...prev,
-                            [post.id]: e.target.value
-                          }))}
-                          className="min-h-[80px]"
-                        />
-                        
-                        {/* Componente de subida de archivos para respuestas */}
-                        <ForumFileUpload
-                          onFilesChange={(files) => handleReplyFilesChange(post.id, files)}
-                          maxFiles={3}
-                          maxSizePerFile={5}
-                        />
-                        
-                        <div className="flex justify-end">
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-foreground hover:underline cursor-pointer">
+                              {post.author_name}
+                            </h4>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <span>{formatDate(post.created_at)}</span>
+                              <span>·</span>
+                              <Badge variant="outline" className="text-xs">
+                                {post.author_role === 'formador' || post.author_role === 'teacher' ? 'Profesor' :
+                                 post.author_role === 'admin' ? 'Admin' :
+                                 post.author_role === 'voluntario' ? 'Voluntario' : 'Estudiante'}
+                              </Badge>
+                            </div>
+                          </div>
+                          {(post.author_id === user?.id || isTeacherOrAdmin) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeletePost(post)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Post Content */}
+                    <div className="mt-3">
+                      <p className="text-foreground whitespace-pre-wrap">{post.content}</p>
+                    </div>
+                  </div>
+
+                  {/* Post Images */}
+                  {post.files && post.files.length > 0 && (
+                    <div className="grid grid-cols-2 gap-1">
+                      {post.files.slice(0, 4).map((file: ForumPostFile, index) => {
+                        if (file.file_type?.startsWith('image/')) {
+                          return (
+                            <div
+                              key={file.id}
+                              className={`relative ${post.files!.length === 1 ? 'col-span-2' : ''} ${
+                                index === 0 && post.files!.length === 3 ? 'col-span-2' : ''
+                              }`}
+                              onClick={() => setSelectedImage(file.file_url)}
+                            >
+                              <img
+                                src={file.file_url}
+                                alt={file.file_name}
+                                className="w-full h-64 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                              />
+                              {index === 3 && post.files!.length > 4 && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center cursor-pointer">
+                                  <span className="text-white text-3xl font-bold">
+                                    +{post.files!.length - 4}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  )}
+
+                  {/* Post Stats */}
+                  <div className="px-4 py-2 flex items-center justify-between text-sm text-muted-foreground border-t">
+                    <div className="flex items-center gap-1">
+                      {post.likes_count! > 0 && (
+                        <>
+                          <div className="flex -space-x-1">
+                            <div className="h-5 w-5 rounded-full bg-red-500 flex items-center justify-center">
+                              <Heart className="h-3 w-3 text-white fill-white" />
+                            </div>
+                          </div>
+                          <span>{post.likes_count}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {post.replies_count! > 0 && (
+                        <span>{post.replies_count} comentarios</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Post Actions */}
+                  <div className="px-4 py-2 flex items-center justify-around border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleLikePost(post.id)}
+                      className={`flex-1 gap-2 ${post.is_liked ? 'text-red-500' : 'text-muted-foreground'}`}
+                    >
+                      <Heart className={`h-5 w-5 ${post.is_liked ? 'fill-current' : ''}`} />
+                      Me gusta
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleReplies(post.id)}
+                      className="flex-1 gap-2 text-muted-foreground"
+                    >
+                      <MessageCircle className="h-5 w-5" />
+                      Comentar
+                    </Button>
+                  </div>
+
+                  {/* Comments Section */}
+                  {showReplies[post.id] && (
+                    <div className="border-t bg-muted/10 px-4 py-3 space-y-3">
+                      {/* Existing Comments */}
+                      {replies[post.id] && replies[post.id].length > 0 && (
+                        <div className="space-y-3">
+                          {replies[post.id].map((reply: any) => (
+                            <div key={reply.id} className="flex gap-2">
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage src={reply.author_avatar_url || undefined} alt={reply.author_name || 'Usuario'} />
+                                <AvatarFallback className="bg-muted text-xs">
+                                  {getInitials(reply.author_name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <div className="bg-muted rounded-2xl px-3 py-2">
+                                  <p className="font-semibold text-sm">{reply.author_name}</p>
+                                  <p className="text-sm text-foreground">{reply.content}</p>
+                                </div>
+                                <div className="flex items-center gap-3 px-3 mt-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDate(reply.created_at)}
+                                  </span>
+                                  {(reply.author_id === user?.id || isTeacherOrAdmin) && (
+                                    <>
+                                      <span className="text-xs text-muted-foreground">·</span>
+                                      <button
+                                        onClick={() => handleDeleteReply(reply.id, post.id)}
+                                        className="text-xs text-destructive hover:underline"
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* New Comment Input */}
+                      <div className="flex gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.full_name || 'Usuario'} />
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                            {profile?.full_name?.charAt(0)?.toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 flex gap-2 items-center">
+                          <Input
+                            placeholder="Escribe un comentario..."
+                            value={newReply[post.id] || ''}
+                            onChange={(e) => setNewReply(prev => ({
+                              ...prev,
+                              [post.id]: e.target.value
+                            }))}
+                            className="bg-muted border-none rounded-full flex-1"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey && newReply[post.id]?.trim()) {
+                                e.preventDefault();
+                                handleAddReply(post.id);
+                              }
+                            }}
+                          />
                           <Button
-                            size="sm"
+                            size="icon"
                             onClick={() => handleAddReply(post.id)}
                             disabled={!newReply[post.id]?.trim()}
+                            className="h-10 w-10 rounded-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:opacity-50 text-white shadow-lg flex-shrink-0"
+                            title="Enviar comentario"
                           >
-                            Comentar
+                            <Send className="h-5 w-5 text-white" />
                           </Button>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-            </Card>
-          ))
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* Edit Forum Dialog */}
+        <Dialog open={showEditForum} onOpenChange={setShowEditForum}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Editar Foro</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-forum-name">Nombre del Foro</Label>
+                <Input
+                  id="edit-forum-name"
+                  value={newForum.name}
+                  onChange={(e) => setNewForum({ ...newForum, name: e.target.value })}
+                  placeholder="Nombre del foro"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-forum-description">Descripción</Label>
+                <Textarea
+                  id="edit-forum-description"
+                  value={newForum.description}
+                  onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
+                  placeholder="Descripción del foro"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-forum-cover">Imagen de Portada</Label>
+                <Input
+                  id="edit-forum-cover"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setNewForum({ ...newForum, cover_image: file });
+                    }
+                  }}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-forum-program">Programa</Label>
+                <Select
+                  value={newForum.program_ids[0] || ''}
+                  onValueChange={(value) => setNewForum({ ...newForum, program_ids: [value] })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un programa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {programs.map(program => (
+                      <SelectItem key={program.id} value={program.id}>
+                        {program.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex gap-2">
+                <Button onClick={handleUpdateForum} className="flex-1">
+                  Actualizar Foro
+                </Button>
+                <Button variant="outline" onClick={() => setShowEditForum(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Image Viewer Modal */}
+        {selectedImage && (
+          <div
+            className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4"
+            onClick={() => setSelectedImage(null)}
+          >
+            <div className="relative max-w-7xl max-h-full">
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="absolute -top-12 right-0 text-white/80 hover:text-white text-sm flex items-center gap-2"
+              >
+                <span>Cerrar (ESC)</span>
+              </button>
+
+              <img
+                src={selectedImage}
+                alt="Imagen ampliada"
+                className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
         )}
       </div>
-
-      {/* Dialog para editar foro */}
-      <Dialog open={showEditForum} onOpenChange={setShowEditForum}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Editar Foro</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="edit-forum-name">Nombre del Foro</Label>
-              <Input
-                id="edit-forum-name"
-                value={newForum.name}
-                onChange={(e) => setNewForum({ ...newForum, name: e.target.value })}
-                placeholder="Nombre del foro"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="edit-forum-description">Descripción (opcional)</Label>
-              <Textarea
-                id="edit-forum-description"
-                value={newForum.description}
-                onChange={(e) => setNewForum({ ...newForum, description: e.target.value })}
-                placeholder="Descripción del foro"
-                rows={3}
-                className="min-h-[80px] bg-background text-foreground placeholder:text-muted-foreground border-input"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="edit-forum-program">Programa</Label>
-              <Select 
-                value={newForum.program_ids[0] || ''} 
-                onValueChange={(value) => setNewForum({ ...newForum, program_ids: [value] })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un programa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {programs.map(program => (
-                    <SelectItem key={program.id} value={program.id}>
-                      {program.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={handleUpdateForum} className="flex-1">
-                Actualizar Foro
-              </Button>
-              <Button variant="outline" onClick={() => setShowEditForum(false)}>
-                Cancelar
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal mejorado para mostrar imagen en tamaño completo */}
-            {selectedImage && (
-        <div 
-          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedImage(null)}
-        >
-          <div className="relative max-w-7xl max-h-full">
-            {/* Botón de cerrar mejorado */}
-            <button 
-              onClick={() => setSelectedImage(null)}
-              className="absolute -top-12 right-0 text-white/80 hover:text-white text-sm flex items-center gap-2 bg-black/20 hover:bg-black/40 px-3 py-1 rounded-md transition-all duration-200"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Cerrar (ESC)
-            </button>
-            
-            {/* Imagen con animación */}
-              <img 
-                src={selectedImage} 
-                alt="Imagen ampliada"
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200"
-              onClick={(e) => e.stopPropagation()}
-            />
-            
-            {/* Botones de acción */}
-            <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 flex gap-2">
-              <a 
-                href={selectedImage} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md text-sm flex items-center gap-2 transition-all duration-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                Abrir original
-              </a>
-              <button 
-                onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = selectedImage;
-                  link.download = 'imagen.jpg';
-                  link.click();
-                }}
-                className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md text-sm flex items-center gap-2 transition-all duration-200"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Descargar
-              </button>
-          </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
