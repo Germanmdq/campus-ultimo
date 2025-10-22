@@ -301,13 +301,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       console.log('👋 Cerrando sesión...')
-      await supabase.auth.signOut()
+
+      // Limpiar estado primero
       setUser(null)
       setSession(null)
       setProfile(null)
+
+      // Limpiar storage
+      localStorage.clear()
+      sessionStorage.clear()
+
+      // Cerrar sesión en Supabase
+      await supabase.auth.signOut()
+
+      // Redirigir a login
+      window.location.href = '/auth'
+
       console.log('✅ Sesión cerrada')
     } catch (error) {
       console.error('❌ Error en signOut:', error)
+      // Forzar limpieza y redirect incluso si falla
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/auth'
     }
   }
 
