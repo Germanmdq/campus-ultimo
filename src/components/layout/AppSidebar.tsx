@@ -136,7 +136,7 @@ export function AppSidebar() {
 
   const handleSupportSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const mailto = `mailto:soporte@espaciodegemotriasagrada.com?subject=${encodeURIComponent('Consulta de soporte')}&body=${encodeURIComponent(`De: ${supportEmail}\n\n${supportMessage}`)}`;
+    const mailto = `mailto:soporte@espaciodegeometriasagrada.com?subject=${encodeURIComponent('Consulta de soporte')}&body=${encodeURIComponent(`De: ${supportEmail}\n\n${supportMessage}`)}`;
     window.location.href = mailto;
     setSupportOpen(false);
   };
