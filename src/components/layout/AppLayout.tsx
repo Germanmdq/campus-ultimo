@@ -34,7 +34,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="flex-1" />
           </header>
 
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-6 overflow-auto page-transition">
             {children}
           </main>
         </div>

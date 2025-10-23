@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,12 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Users, 
-  FileText, 
-  BookOpen, 
+import {
+  CheckCircle,
+  XCircle,
+  Users,
+  FileText,
+  BookOpen,
   Clock,
   Download,
   MessageSquare,
@@ -22,6 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { sendModuleCompletedEmail } from '@/lib/email';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Assignment {
   id: string;
@@ -63,148 +64,125 @@ interface CourseStats {
 export default function Profesor() {
   const { profile } = useAuth();
   const { toast } = useToast();
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [programStats, setProgramStats] = useState<ProgramStats[]>([]);
-  const [courseStats, setCourseStats] = useState<CourseStats[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [feedback, setFeedback] = useState('');
   const [grade, setGrade] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (
-      profile?.role === 'formador' ||
-      profile?.role === 'admin' ||
-      profile?.role === 'profesor' ||
-      profile?.role === 'teacher'
-    ) {
-      fetchData();
-    }
-  }, [profile]);
+  const isAuthorized =
+    profile?.role === 'formador' ||
+    profile?.role === 'admin' ||
+    profile?.role === 'profesor' ||
+    profile?.role === 'teacher';
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch pending assignments
-      const { data: assignmentsData, error: assignmentsError } = await supabase
+  // Query optimizada de assignments con joins (sin N+1)
+  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery({
+    queryKey: ['profesor-assignments'],
+    queryFn: async () => {
+      // Un solo query con todos los joins necesarios
+      const { data, error } = await supabase
         .from('assignments')
         .select(`
           *,
-          lesson:lessons(
+          profiles!assignments_user_id_fkey(full_name),
+          lessons!inner(
             title,
-            course:courses(title)
+            courses!inner(title)
           )
         `)
         .order('updated_at', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(200);
+        .limit(100);
 
-      if (assignmentsError) throw assignmentsError;
-      
-      // Get user profiles for assignments
-      const assignmentsWithProfiles = await Promise.all(
-        (assignmentsData || []).map(async (assignment) => {
-          const [{ data: profileData }, lessonInfo] = await Promise.all([
-            supabase
-              .from('profiles')
-              .select('full_name')
-              .eq('id', assignment.user_id)
-              .single(),
-            assignment.lesson ? Promise.resolve({ data: assignment.lesson }) : supabase
-              .from('lessons')
-              .select('title, course:courses(title)')
-              .eq('id', assignment.lesson_id)
-              .single()
-          ]);
+      if (error) throw error;
 
-          return {
-            ...assignment,
-            lesson: lessonInfo?.data || assignment.lesson,
-            user_profile: {
-              full_name: profileData?.full_name || 'Usuario desconocido'
-            }
-          };
-        })
-      );
-      
-      setAssignments(assignmentsWithProfiles);
+      return (data || []).map((a: any) => ({
+        ...a,
+        user_profile: {
+          full_name: a.profiles?.full_name || 'Usuario desconocido'
+        },
+        lesson: {
+          title: a.lessons?.title || 'Lección',
+          course: {
+            title: a.lessons?.courses?.title || 'Curso'
+          }
+        }
+      }));
+    },
+    enabled: isAuthorized,
+    staleTime: 1000 * 60 * 2, // 2 minutos
+  });
 
-      // Fetch program stats with proper enrollment counting
-      const { data: programsData, error: programsError } = await supabase
-        .from('programs')
-        .select(`
-          id,
-          title,
-          courses(id)
-        `);
+  // Query optimizada de program stats (sin N+1)
+  const { data: programStats = [], isLoading: programsLoading } = useQuery({
+    queryKey: ['profesor-program-stats'],
+    queryFn: async () => {
+      // Obtener todos los datos en paralelo
+      const [{ data: programs }, { data: enrollments }, { data: programCourses }] = await Promise.all([
+        supabase.from('programs').select('id, title'),
+        supabase.from('enrollments').select('program_id').eq('status', 'active'),
+        supabase.from('program_courses').select('program_id, course_id')
+      ]);
 
-      if (programsError) throw programsError;
-      
-      // Get enrollment counts for each program
-      const programStatsPromises = programsData?.map(async (program) => {
-        const { count: enrolledCount } = await supabase
-          .from('enrollments')
-          .select('*', { count: 'exact', head: true })
-          .eq('program_id', program.id)
-          .eq('status', 'active');
-        
-        return {
-          program_id: program.id,
-          program_title: program.title,
-          enrolled_count: enrolledCount || 0,
-          courses_count: program.courses?.length || 0
-        };
-      }) || [];
-      
-      const programStatsData = await Promise.all(programStatsPromises);
-      setProgramStats(programStatsData);
-
-      // Fetch course stats with proper enrollment counting  
-      const { data: coursesData, error: coursesError } = await supabase
-        .from('courses')
-        .select(`
-          id,
-          title,
-          program_id,
-          program:programs(title),
-          lessons(id)
-        `);
-
-      if (coursesError) throw coursesError;
-      
-      const courseStatsPromises = coursesData?.map(async (course) => {
-        // Para cursos individuales, contar inscripciones directas en course_enrollments
-        const { count: enrolledCount } = await supabase
-          .from('course_enrollments')
-          .select('*', { count: 'exact', head: true })
-          .eq('course_id', course.id)
-          .eq('status', 'active');
-        
-        return {
-          course_id: course.id,
-          course_title: course.title,
-          program_title: course.program?.title || 'Sin programa',
-          enrolled_count: enrolledCount || 0,
-          lessons_count: course.lessons?.length || 0
-        };
-      }) || [];
-      
-      const courseStatsData = await Promise.all(courseStatsPromises);
-      setCourseStats(courseStatsData);
-
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los datos",
-        variant: "destructive",
+      // Contar en memoria (más rápido que queries múltiples)
+      const enrollmentCounts = new Map<string, number>();
+      (enrollments || []).forEach(e => {
+        enrollmentCounts.set(e.program_id, (enrollmentCounts.get(e.program_id) || 0) + 1);
       });
-    } finally {
-      setLoading(false);
-    }
-  };
+
+      const courseCounts = new Map<string, number>();
+      (programCourses || []).forEach(pc => {
+        courseCounts.set(pc.program_id, (courseCounts.get(pc.program_id) || 0) + 1);
+      });
+
+      return (programs || []).map(p => ({
+        program_id: p.id,
+        program_title: p.title,
+        enrolled_count: enrollmentCounts.get(p.id) || 0,
+        courses_count: courseCounts.get(p.id) || 0
+      }));
+    },
+    enabled: isAuthorized,
+    staleTime: 1000 * 60 * 5, // 5 minutos
+  });
+
+  // Query optimizada de course stats (sin N+1)
+  const { data: courseStats = [], isLoading: coursesLoading } = useQuery({
+    queryKey: ['profesor-course-stats'],
+    queryFn: async () => {
+      // Obtener todos los datos en paralelo
+      const [{ data: courses }, { data: enrollments }, { data: lessons }] = await Promise.all([
+        supabase.from('courses').select('id, title, program_id, programs(title)'),
+        supabase.from('course_enrollments').select('course_id').eq('status', 'active'),
+        supabase.from('lessons').select('id, course_id')
+      ]);
+
+      // Contar en memoria
+      const enrollmentCounts = new Map<string, number>();
+      (enrollments || []).forEach(e => {
+        enrollmentCounts.set(e.course_id, (enrollmentCounts.get(e.course_id) || 0) + 1);
+      });
+
+      const lessonCounts = new Map<string, number>();
+      (lessons || []).forEach(l => {
+        if (l.course_id) {
+          lessonCounts.set(l.course_id, (lessonCounts.get(l.course_id) || 0) + 1);
+        }
+      });
+
+      return (courses || []).map((c: any) => ({
+        course_id: c.id,
+        course_title: c.title,
+        program_title: c.programs?.title || 'Sin programa',
+        enrolled_count: enrollmentCounts.get(c.id) || 0,
+        lessons_count: lessonCounts.get(c.id) || 0
+      }));
+    },
+    enabled: isAuthorized,
+    staleTime: 1000 * 60 * 5, // 5 minutos
+  });
+
+  const loading = assignmentsLoading || programsLoading || coursesLoading;
 
   const handleApproveAssignment = async (assignmentId: string, action: 'approved' | 'rejected') => {
     if (!feedback.trim() && action === 'rejected') {
@@ -273,9 +251,9 @@ export default function Profesor() {
       setSelectedAssignment(null);
       setFeedback('');
       setGrade('');
-      
-      // Refresh data
-      fetchData();
+
+      // Invalidar cache para refrescar datos
+      queryClient.invalidateQueries({ queryKey: ['profesor-assignments'] });
 
     } catch (error) {
       console.error('Error processing assignment:', error);
@@ -299,12 +277,7 @@ export default function Profesor() {
     });
   };
 
-  if (
-    profile?.role !== 'formador' &&
-    profile?.role !== 'admin' &&
-    profile?.role !== 'profesor' &&
-    profile?.role !== 'teacher'
-  ) {
+  if (!isAuthorized) {
     return (
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold mb-2">Acceso Denegado</h2>
