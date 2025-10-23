@@ -77,6 +77,7 @@ export default function Profesor() {
     profile?.role === 'teacher';
 
   // Query optimizada de assignments con joins (sin N+1)
+  // SOLO muestra trabajos pendientes (submitted/reviewing), no aprobados/rechazados
   const { data: assignments = [], isLoading: assignmentsLoading } = useQuery({
     queryKey: ['profesor-assignments'],
     queryFn: async () => {
@@ -91,6 +92,7 @@ export default function Profesor() {
             courses!inner(title)
           )
         `)
+        .in('status', ['submitted', 'reviewing']) // Solo pendientes
         .order('updated_at', { ascending: false })
         .limit(100);
 
@@ -329,9 +331,16 @@ export default function Profesor() {
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Entregas por Revisar</h2>
                 {pendingAssignments.map(assignment => (
-                  <Card 
+                  <Card
                     key={assignment.id}
-                    className={`transition-all hover:shadow-md`}
+                    className={`transition-all hover:shadow-md cursor-pointer ${
+                      selectedAssignment?.id === assignment.id ? 'ring-2 ring-primary' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedAssignment(assignment);
+                      setFeedback(assignment.feedback || '');
+                      setGrade(assignment.grade?.toString() || '');
+                    }}
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
@@ -339,7 +348,9 @@ export default function Profesor() {
                           <CardTitle className="text-lg">{assignment.lesson?.title || 'Lección'}</CardTitle>
                           <p className="text-sm text-muted-foreground">{assignment.lesson?.course?.title || 'Curso'}</p>
                         </div>
-                        <Badge variant="secondary">{assignment.status === 'approved' ? 'Aprobada' : assignment.status === 'rejected' ? 'Rechazada' : 'Pendiente'}</Badge>
+                        <Badge variant="secondary">
+                          {assignment.status === 'reviewing' ? 'En revisión' : 'Pendiente'}
+                        </Badge>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -362,19 +373,19 @@ export default function Profesor() {
                             {assignment.file_url ? 'Archivo adjunto' : 'Respuesta de texto'}
                           </span>
                           {assignment.file_url && (
-                            <Button size="sm" variant="outline" onClick={() => window.open(assignment.file_url!, '_blank')}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(assignment.file_url!, '_blank');
+                              }}
+                            >
                               <Download className="h-3 w-3 mr-1" /> Abrir
                             </Button>
                           )}
                         </div>
                       )}
-                      <div className="flex gap-2 mt-3">
-                        {assignment.status !== 'approved' && (
-                          <Button size="sm" className="flex-1" onClick={() => handleApproveAssignment(assignment.id, 'approved')} disabled={submitting}>
-                            <CheckCircle className="h-4 w-4 mr-1" /> Aprobar
-                          </Button>
-                        )}
-                      </div>
                     </CardContent>
                   </Card>
                 ))}

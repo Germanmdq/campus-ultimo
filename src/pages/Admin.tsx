@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface ActivityData {
   programs: Array<{ id: string; title: string; created_at: string; courses_count: number }>;
@@ -32,30 +33,151 @@ interface ActivityData {
 export default function Admin() {
   const { profile, loading: authLoading } = useAuth();
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
   const [showCreateProgram, setShowCreateProgram] = useState(false);
   const [showCreateCourse, setShowCreateCourse] = useState(false);
   const [showAddCourses, setShowAddCourses] = useState(false);
   const [selectedProgramId, setSelectedProgramId] = useState<string>('');
   const [showProgramSelector, setShowProgramSelector] = useState(false);
   const { stats, loading, refetch } = useStats();
-  const [activityLoading, setActivityLoading] = useState(true);
-  const [activity, setActivity] = useState<ActivityData>({
-    programs: [],
-    totalUsers: 0,
-    newUsers30Days: [],
-    inactiveUsers17Days: [],
-    frequentUsers: [],
-    formadores: [],
-    voluntarios: [],
-    topPrograms: [],
-    topCourses: [],
-  });
 
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTitle, setDialogTitle] = useState('');
   const [dialogData, setDialogData] = useState<any[]>([]);
   const [dialogType, setDialogType] = useState('');
+
+  // Query optimizada para Activity Data
+  const { data: activity, isLoading: activityLoading } = useQuery({
+    queryKey: ['admin-activity'],
+    queryFn: async () => {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const seventeenDaysAgo = new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString();
+      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Ejecutar todas las queries base en paralelo
+      const [
+        { data: programsData },
+        { data: programCourses },
+        { count: totalStudents },
+        { data: newUsers },
+        { data: allStudents },
+        { data: allProgress },
+        { data: formadores },
+        { data: voluntarios },
+        { data: recentProgress },
+      ] = await Promise.all([
+        supabase.from('programs').select('id, title, created_at').order('created_at', { ascending: false }),
+        supabase.from('program_courses').select('program_id, course_id'),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'student').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, avatar_url, email').eq('role', 'student'),
+        supabase.from('lesson_progress').select('user_id, updated_at, watched_seconds, lessons!inner(course_id, courses!inner(title, program_courses!inner(program_id, programs!inner(title))))'),
+        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'formador').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'voluntario' as any).order('created_at', { ascending: false }),
+        supabase.from('lesson_progress').select('user_id, updated_at').gte('updated_at', fifteenDaysAgo),
+      ]);
+
+      // Contar cursos por programa EN MEMORIA (no N+1)
+      const courseCountByProgram = new Map<string, number>();
+      (programCourses || []).forEach(pc => {
+        courseCountByProgram.set(pc.program_id, (courseCountByProgram.get(pc.program_id) || 0) + 1);
+      });
+
+      const programsWithCourses = (programsData || []).map(p => ({
+        ...p,
+        courses_count: courseCountByProgram.get(p.id) || 0
+      }));
+
+      // Usuarios inactivos EN MEMORIA (no N+1)
+      const lastActivityByUser = new Map<string, string>();
+      (allProgress || []).forEach(prog => {
+        const current = lastActivityByUser.get(prog.user_id);
+        if (!current || new Date(prog.updated_at) > new Date(current)) {
+          lastActivityByUser.set(prog.user_id, prog.updated_at);
+        }
+      });
+
+      const inactiveUsers = (allStudents || [])
+        .map(student => {
+          const lastActivity = lastActivityByUser.get(student.id) || null;
+          if (!lastActivity || new Date(lastActivity) < new Date(seventeenDaysAgo)) {
+            return { ...student, last_activity: lastActivity };
+          }
+          return null;
+        })
+        .filter(u => u !== null);
+
+      // Usuarios frecuentes EN MEMORIA
+      const activityByUser: Record<string, Set<string>> = {};
+      (recentProgress || []).forEach(prog => {
+        const day = new Date(prog.updated_at).toISOString().split('T')[0];
+        if (!activityByUser[prog.user_id]) {
+          activityByUser[prog.user_id] = new Set();
+        }
+        activityByUser[prog.user_id].add(day);
+      });
+
+      const frequentUserIds = Object.entries(activityByUser)
+        .filter(([_, days]) => days.size >= 2)
+        .map(([userId]) => userId);
+
+      const frequentUsersData = (allStudents || [])
+        .filter(student => frequentUserIds.includes(student.id))
+        .map(user => ({
+          ...user,
+          activity_count: activityByUser[user.id].size,
+        }))
+        .sort((a, b) => b.activity_count - a.activity_count);
+
+      // Top programs EN MEMORIA
+      const minutesByProgram: Record<string, { title: string; minutes: number }> = {};
+      (allProgress || []).forEach((prog: any) => {
+        const programId = prog.lessons?.courses?.program_courses?.[0]?.program_id;
+        const programTitle = prog.lessons?.courses?.program_courses?.[0]?.programs?.title;
+        if (!programId || !programTitle) return;
+        if (!minutesByProgram[programId]) {
+          minutesByProgram[programId] = { title: programTitle, minutes: 0 };
+        }
+        minutesByProgram[programId].minutes += Math.floor((prog.watched_seconds || 0) / 60);
+      });
+
+      const topPrograms = Object.entries(minutesByProgram)
+        .map(([id, data]) => ({ id, title: data.title, view_minutes: data.minutes }))
+        .sort((a, b) => b.view_minutes - a.view_minutes)
+        .slice(0, 5);
+
+      // Top courses EN MEMORIA
+      const minutesByCourse: Record<string, { title: string; minutes: number }> = {};
+      (allProgress || []).forEach((prog: any) => {
+        const courseId = prog.lessons?.course_id;
+        const courseTitle = prog.lessons?.courses?.title;
+        if (!courseId || !courseTitle) return;
+        if (!minutesByCourse[courseId]) {
+          minutesByCourse[courseId] = { title: courseTitle, minutes: 0 };
+        }
+        minutesByCourse[courseId].minutes += Math.floor((prog.watched_seconds || 0) / 60);
+      });
+
+      const topCourses = Object.entries(minutesByCourse)
+        .map(([id, data]) => ({ id, title: data.title, view_minutes: data.minutes }))
+        .sort((a, b) => b.view_minutes - a.view_minutes)
+        .slice(0, 5);
+
+      return {
+        programs: programsWithCourses,
+        totalUsers: totalStudents || 0,
+        newUsers30Days: newUsers || [],
+        inactiveUsers17Days: inactiveUsers,
+        frequentUsers: frequentUsersData,
+        formadores: formadores || [],
+        voluntarios: voluntarios || [],
+        topPrograms,
+        topCourses,
+      };
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutos
+  });
 
   const getInitials = (name: string) => {
     return name
@@ -80,153 +202,6 @@ export default function Admin() {
     return <Navigate to="/mi-formacion" replace />;
   }
 
-  useEffect(() => {
-    fetchActivityData();
-  }, []);
-
-  const fetchActivityData = async () => {
-    try {
-      setActivityLoading(true);
-
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const seventeenDaysAgo = new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString();
-      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
-
-      // Ejecutar queries en paralelo para mejor performance
-      const [
-        { data: programsData },
-        { count: totalStudents },
-        { data: newUsers },
-        { data: allStudents },
-        { data: formadores },
-        { data: voluntarios },
-        { data: recentProgress },
-      ] = await Promise.all([
-        supabase.from('programs').select('id, title, created_at').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'student').gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id, full_name, avatar_url, email').eq('role', 'student'),
-        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'formador').order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id, full_name, avatar_url, created_at, email').eq('role', 'voluntario' as any).order('created_at', { ascending: false }),
-        supabase.from('lesson_progress').select('user_id, updated_at').gte('updated_at', fifteenDaysAgo),
-      ]);
-
-      // Contar cursos por programa (en paralelo)
-      const programsWithCourses = await Promise.all(
-        (programsData || []).map(async (prog) => {
-          const { count } = await supabase.from('program_courses').select('*', { count: 'exact', head: true }).eq('program_id', prog.id);
-          return { ...prog, courses_count: count || 0 };
-        })
-      );
-
-      // Obtener última actividad de cada estudiante
-      const inactiveUsers = await Promise.all(
-        (allStudents || []).map(async (student) => {
-          const { data: progress } = await supabase
-            .from('lesson_progress')
-            .select('updated_at')
-            .eq('user_id', student.id)
-            .order('updated_at', { ascending: false })
-            .limit(1);
-
-          const lastActivity = progress?.[0]?.updated_at || null;
-
-          // Si no tiene actividad O la última actividad fue hace más de 17 días
-          if (!lastActivity || new Date(lastActivity) < new Date(seventeenDaysAgo)) {
-            return { ...student, last_activity: lastActivity };
-          }
-          return null;
-        })
-      );
-
-      const filteredInactive = inactiveUsers.filter(u => u !== null) as any[];
-
-      // Agrupar por usuario y contar días únicos de actividad
-      const activityByUser: Record<string, Set<string>> = {};
-      (recentProgress || []).forEach(prog => {
-        const userId = prog.user_id;
-        const day = new Date(prog.updated_at).toISOString().split('T')[0];
-        if (!activityByUser[userId]) {
-          activityByUser[userId] = new Set();
-        }
-        activityByUser[userId].add(day);
-      });
-
-      // Filtrar usuarios con 2 o más días de actividad
-      const frequentUserIds = Object.entries(activityByUser)
-        .filter(([_, days]) => days.size >= 2)
-        .map(([userId]) => userId);
-
-      let frequentUsersData: any[] = [];
-      if (frequentUserIds.length > 0) {
-        const { data: frequentUsers } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, email')
-          .in('id', frequentUserIds);
-
-        frequentUsersData = (frequentUsers || []).map(user => ({
-          ...user,
-          activity_count: activityByUser[user.id].size,
-        })).sort((a, b) => b.activity_count - a.activity_count);
-      }
-
-      // Programas más vistos (por minutos de lecciones vistas)
-      const { data: allProgress } = await supabase
-        .from('lesson_progress')
-        .select('watched_seconds, lessons!inner(course_id, courses!inner(program_courses!inner(program_id, programs!inner(title))))');
-
-      const minutesByProgram: Record<string, { title: string; minutes: number }> = {};
-      (allProgress || []).forEach((prog: any) => {
-        const programId = prog.lessons?.courses?.program_courses?.[0]?.program_id;
-        const programTitle = prog.lessons?.courses?.program_courses?.[0]?.programs?.title;
-        if (!programId || !programTitle) return;
-
-        if (!minutesByProgram[programId]) {
-          minutesByProgram[programId] = { title: programTitle, minutes: 0 };
-        }
-        minutesByProgram[programId].minutes += Math.floor((prog.watched_seconds || 0) / 60);
-      });
-
-      const topPrograms = Object.entries(minutesByProgram)
-        .map(([id, data]) => ({ id, title: data.title, view_minutes: data.minutes }))
-        .sort((a, b) => b.view_minutes - a.view_minutes)
-        .slice(0, 5);
-
-      // Cursos más vistos
-      const minutesByCourse: Record<string, { title: string; minutes: number }> = {};
-      (allProgress || []).forEach((prog: any) => {
-        const courseId = prog.lessons?.course_id;
-        const courseTitle = prog.lessons?.courses?.title;
-        if (!courseId || !courseTitle) return;
-
-        if (!minutesByCourse[courseId]) {
-          minutesByCourse[courseId] = { title: courseTitle, minutes: 0 };
-        }
-        minutesByCourse[courseId].minutes += Math.floor((prog.watched_seconds || 0) / 60);
-      });
-
-      const topCourses = Object.entries(minutesByCourse)
-        .map(([id, data]) => ({ id, title: data.title, view_minutes: data.minutes }))
-        .sort((a, b) => b.view_minutes - a.view_minutes)
-        .slice(0, 5);
-
-      setActivity({
-        programs: programsWithCourses,
-        totalUsers: totalStudents || 0,
-        newUsers30Days: newUsers || [],
-        inactiveUsers17Days: filteredInactive,
-        frequentUsers: frequentUsersData,
-        formadores: formadores || [],
-        voluntarios: voluntarios || [],
-        topPrograms,
-        topCourses,
-      });
-    } catch (error) {
-      console.error('Error fetching activity data:', error);
-    } finally {
-      setActivityLoading(false);
-    }
-  };
 
   const openDialog = (title: string, data: any[], type: string) => {
     setDialogTitle(title);
@@ -245,7 +220,7 @@ export default function Admin() {
 
   const handleSuccess = () => {
     refetch();
-    fetchActivityData();
+    queryClient.invalidateQueries({ queryKey: ['admin-activity'] });
   };
 
   return (
@@ -285,7 +260,7 @@ export default function Admin() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : (
+      ) : activity ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {/* Programas */}
           <Card
@@ -446,7 +421,7 @@ export default function Admin() {
             </CardHeader>
           </Card>
         </div>
-      )}
+      ) : null}
 
       {/* Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

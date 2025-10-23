@@ -84,24 +84,36 @@ export default function Cuenta() {
     try {
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
-      
-      // Simulate multiple sessions for demo
-      setSessions([
-        {
-          id: 'current',
-          device: 'Chrome en macOS',
-          location: 'Buenos Aires, Argentina',
-          lastActive: new Date().toISOString(),
-          current: true
-        },
-        {
-          id: 'mobile',
-          device: 'Safari en iPhone',
-          location: 'Buenos Aires, Argentina',
-          lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          current: false
-        }
-      ]);
+
+      if (data.session) {
+        // Detectar navegador y OS reales
+        const ua = navigator.userAgent;
+        let browser = 'Navegador desconocido';
+        let os = 'Sistema desconocido';
+
+        // Detectar navegador
+        if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome';
+        else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+        else if (ua.includes('Firefox')) browser = 'Firefox';
+        else if (ua.includes('Edg')) browser = 'Edge';
+
+        // Detectar OS
+        if (ua.includes('Windows')) os = 'Windows';
+        else if (ua.includes('Mac')) os = 'macOS';
+        else if (ua.includes('Linux')) os = 'Linux';
+        else if (ua.includes('Android')) os = 'Android';
+        else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+
+        setSessions([
+          {
+            id: data.session.user.id,
+            device: `${browser} en ${os}`,
+            location: 'Ubicación no disponible',
+            lastActive: data.session.expires_at || new Date().toISOString(),
+            current: true
+          }
+        ]);
+      }
     } catch (error) {
       console.error('Error loading sessions:', error);
     }
@@ -273,9 +285,11 @@ export default function Cuenta() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              Solo puedes tener 2 sesiones activas
-            </p>
+            {sessions.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No hay sesiones activas
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
