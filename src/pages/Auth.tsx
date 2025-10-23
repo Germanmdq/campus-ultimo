@@ -8,6 +8,7 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -15,9 +16,10 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
-  
+
   const { user, profile, loading: authLoading, signIn } = useAuth();
   const { toast } = useToast();
+  const { theme } = useTheme();
 
   useEffect(() => {
     // Set default theme to dark for auth page
@@ -101,7 +103,11 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-[calc(42rem-10px)]">
         <div className="text-center mb-8">
-          <img src="/Logo-email.png" alt="Geometría Sagrada" className="h-20 w-auto object-contain mx-auto mb-4" />
+          <img
+            src={theme === 'dark' ? '/Logo-email.png' : '/Logo-claro.png'}
+            alt="Geometría Sagrada"
+            className="h-20 w-auto object-contain mx-auto mb-4"
+          />
         </div>
 
         <Card>

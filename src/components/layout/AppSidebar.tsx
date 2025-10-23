@@ -149,10 +149,18 @@ export function AppSidebar() {
       <SidebarHeader className="border-b p-4">
         {!collapsed ? (
           <div className="flex items-center gap-2">
-            <img src="/Logo-email.png" alt="Logo" className="h-10 w-auto object-contain" />
+            <img
+              src={theme === 'dark' ? '/Logo-email.png' : '/Logo-claro.png'}
+              alt="Logo"
+              className="h-10 w-auto object-contain"
+            />
           </div>
         ) : (
-          <img src="/Logo-email.png" alt="GS" className="h-10 w-auto object-contain mx-auto" />
+          <img
+            src={theme === 'dark' ? '/Logo-email.png' : '/Logo-claro.png'}
+            alt="GS"
+            className="h-10 w-auto object-contain mx-auto"
+          />
         )}
       </SidebarHeader>
 
