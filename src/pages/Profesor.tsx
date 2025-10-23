@@ -23,28 +23,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { sendModuleCompletedEmail } from '@/lib/email';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-
-interface Assignment {
-  id: string;
-  lesson_id: string;
-  user_id: string;
-  status: 'submitted' | 'approved' | 'rejected' | 'reviewing';
-  grade: number | null;
-  max_grade: number;
-  feedback: string | null;
-  file_url: string | null;
-  text_answer: string | null;
-  created_at: string;
-  user_profile: {
-    full_name: string;
-  };
-  lesson: {
-    title: string;
-    course: {
-      title: string;
-    };
-  };
-}
+import { formatDate } from '@/lib/utils/date';
+import type { AssignmentWithDetails } from '@/lib/types/common';
 
 interface ProgramStats {
   program_id: string;
@@ -78,7 +58,7 @@ export default function Profesor() {
 
   // Query optimizada de assignments con joins (sin N+1)
   // SOLO muestra trabajos pendientes (submitted/reviewing), no aprobados/rechazados
-  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery({
+  const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<AssignmentWithDetails[]>({
     queryKey: ['profesor-assignments'],
     queryFn: async () => {
       // Un solo query con todos los joins necesarios
@@ -267,16 +247,6 @@ export default function Profesor() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   if (!isAuthorized) {

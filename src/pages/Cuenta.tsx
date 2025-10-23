@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserStats } from '@/hooks/useUserStats';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
+import { getRoleColor, getRoleLabel, detectBrowser, detectOS } from '@/lib/utils/user';
+import { formatDate } from '@/lib/utils/date';
 
 export default function Cuenta() {
   const { profile, user, signOut } = useAuth();
@@ -86,28 +88,10 @@ export default function Cuenta() {
       if (error) throw error;
 
       if (data.session) {
-        // Detectar navegador y OS reales
-        const ua = navigator.userAgent;
-        let browser = 'Navegador desconocido';
-        let os = 'Sistema desconocido';
-
-        // Detectar navegador
-        if (ua.includes('Chrome') && !ua.includes('Edg')) browser = 'Chrome';
-        else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
-        else if (ua.includes('Firefox')) browser = 'Firefox';
-        else if (ua.includes('Edg')) browser = 'Edge';
-
-        // Detectar OS
-        if (ua.includes('Windows')) os = 'Windows';
-        else if (ua.includes('Mac')) os = 'macOS';
-        else if (ua.includes('Linux')) os = 'Linux';
-        else if (ua.includes('Android')) os = 'Android';
-        else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-
         setSessions([
           {
             id: data.session.user.id,
-            device: `${browser} en ${os}`,
+            device: `${detectBrowser()} en ${detectOS()}`,
             location: 'Ubicación no disponible',
             lastActive: data.session.expires_at || new Date().toISOString(),
             current: true
@@ -117,51 +101,6 @@ export default function Cuenta() {
     } catch (error) {
       console.error('Error loading sessions:', error);
     }
-  };
-
-  const getRoleColor = (role?: string) => {
-    switch ((role || '').toLowerCase()) {
-      case 'admin':
-      case 'administrador':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'teacher':
-      case 'formador':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'voluntario':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'student':
-      case 'estudiante':
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
-    }
-  };
-
-  const getRoleLabel = (role?: string) => {
-    switch ((role || '').toLowerCase()) {
-      case 'admin':
-      case 'administrador':
-        return 'Administrador';
-      case 'teacher':
-      case 'formador':
-        return 'Formador';
-      case 'voluntario':
-        return 'Voluntario';
-      case 'student':
-      case 'estudiante':
-      default:
-        return 'Estudiante';
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   const handleSignOutAll = async () => {

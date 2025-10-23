@@ -14,9 +14,9 @@ import { useStats } from '@/hooks/useStats';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getInitials } from '@/lib/utils/user';
+import { formatRelativeTime } from '@/lib/utils/date';
 
 interface ActivityData {
   programs: Array<{ id: string; title: string; created_at: string; courses_count: number }>;
@@ -178,15 +178,6 @@ export default function Admin() {
     },
     staleTime: 1000 * 60 * 5, // 5 minutos
   });
-
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   // Guard: solo admin o formador pueden acceder
   if (authLoading) {
@@ -434,7 +425,7 @@ export default function Admin() {
               <div key={program.id} className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
                 <p className="font-medium">{program.title}</p>
                 <p className="text-sm text-muted-foreground">
-                  {program.courses_count} curso{program.courses_count !== 1 ? 's' : ''} • Creado {formatDistanceToNow(new Date(program.created_at), { addSuffix: true, locale: es })}
+                  {program.courses_count} curso{program.courses_count !== 1 ? 's' : ''} • Creado {formatRelativeTime(program.created_at)}
                 </p>
               </div>
             ))}
@@ -453,7 +444,7 @@ export default function Admin() {
                 </div>
                 {user.created_at && (
                   <Badge variant="secondary">
-                    {formatDistanceToNow(new Date(user.created_at), { addSuffix: true, locale: es })}
+                    {formatRelativeTime(user.created_at)}
                   </Badge>
                 )}
               </div>
@@ -473,7 +464,7 @@ export default function Admin() {
                 </div>
                 <Badge variant="outline" className="text-orange-600 border-orange-600">
                   {user.last_activity
-                    ? `Última: ${formatDistanceToNow(new Date(user.last_activity), { addSuffix: true, locale: es })}`
+                    ? `Última: ${formatRelativeTime(user.last_activity)}`
                     : 'Sin actividad'}
                 </Badge>
               </div>
