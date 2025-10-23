@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +14,8 @@ import { MessageSquare, Plus, Search, Heart, MessageCircle, Pin, Loader2, Edit, 
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { formatRelativeTime } from '@/lib/utils/date';
+import { getInitials } from '@/lib/utils/user';
 
 interface ForumPost {
   id: string;
@@ -62,24 +62,14 @@ interface Program {
 export default function Comunidad() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const [posts, setPosts] = useState<ForumPost[]>([]);
-  const [forums, setForums] = useState<Forum[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('todos');
   const [selectedForumId, setSelectedForumId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showCreateForumDialog, setShowCreateForumDialog] = useState(false);
-  const [newPost, setNewPost] = useState({
-    title: '',
-    content: '',
-    category: '',
-    forum_id: ''
-  });
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [newForum, setNewForum] = useState({
     name: '',
@@ -92,7 +82,6 @@ export default function Comunidad() {
   const [showReplies, setShowReplies] = useState<{ [postId: string]: boolean }>({});
   const [newReply, setNewReply] = useState<{ [postId: string]: string }>({});
   const [replies, setReplies] = useState<{ [postId: string]: any[] }>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [replyFiles, setReplyFiles] = useState<{ [postId: string]: File[] }>({});
 
   // Quick post state (Facebook style)
@@ -102,11 +91,104 @@ export default function Comunidad() {
 
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin' || profile?.role === 'voluntario';
 
-  useEffect(() => {
-    fetchPosts();
-    fetchForums();
-    fetchPrograms();
-  }, []);
+  // Query optimizada: posts, forums y programs EN PARALELO con React Query
+  const { data: communityData, isLoading: loading } = useQuery({
+    queryKey: ['community-data', user?.id, profile?.role],
+    queryFn: async () => {
+      if (!user) {
+        return { posts: [], forums: [], programs: [] };
+      }
+
+      // QUERIES PARALELAS: posts, user programs, all programs
+      const [postsResult, userProgramsResult, allProgramsResult] = await Promise.all([
+        // Posts con todos los datos anidados
+        supabase
+          .from('forum_posts')
+          .select(`
+            id, title, content, category, pinned, created_at, author_id, forum_id,
+            profiles (full_name, role, avatar_url),
+            forum_post_likes (id, user_id),
+            forum_post_replies (id),
+            forum_post_files (id, file_url, file_name, file_type, file_size)
+          `)
+          .order('pinned', { ascending: false })
+          .order('created_at', { ascending: false }),
+
+        // Programas del usuario (para filtrar foros)
+        supabase
+          .from('enrollments')
+          .select('program_id')
+          .eq('user_id', user.id),
+
+        // Todos los programas (para admin/formador)
+        supabase
+          .from('programs')
+          .select('id, title')
+          .order('title')
+      ]);
+
+      // Procesar posts
+      const validPosts = (postsResult.data || []).filter((post: any) => post.profiles);
+      const processedPosts = validPosts.map((post: any) => ({
+        ...post,
+        author_name: post.profiles?.full_name || 'Usuario',
+        author_role: post.profiles?.role || 'student',
+        author_avatar_url: post.profiles?.avatar_url || null,
+        likes_count: post.forum_post_likes?.length || 0,
+        replies_count: post.forum_post_replies?.length || 0,
+        is_liked: user ? post.forum_post_likes?.some((like: any) => like.user_id === user.id) : false,
+        files: post.forum_post_files || []
+      }));
+
+      // Obtener foros según el rol
+      let forumsData: Forum[] = [];
+      const userRole = profile?.role as string;
+
+      if (userRole === 'admin' || userRole === 'formador' || userRole === 'voluntario') {
+        // Admin/formadores ven todos los foros
+        const { data } = await supabase
+          .from('forums')
+          .select(`id, name, description, program_id, cover_image_url, programs (title)`)
+          .order('name');
+        forumsData = data || [];
+      } else {
+        // Estudiantes solo ven foros de sus programas
+        const userProgramIds = (userProgramsResult.data || []).map((p: any) => p.program_id);
+        if (userProgramIds.length > 0) {
+          const { data } = await supabase
+            .from('forums')
+            .select(`id, name, description, program_id, cover_image_url, programs (title)`)
+            .in('program_id', userProgramIds)
+            .order('name');
+          forumsData = data || [];
+        }
+      }
+
+      return {
+        posts: processedPosts,
+        forums: forumsData,
+        programs: allProgramsResult.data || []
+      };
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 2, // Cache por 2 minutos
+  });
+
+  const posts = communityData?.posts || [];
+  const forums = communityData?.forums || [];
+  const programs = communityData?.programs || [];
+
+  const fetchPosts = () => {
+    queryClient.invalidateQueries({ queryKey: ['community-data'] });
+  };
+
+  const fetchForums = () => {
+    queryClient.invalidateQueries({ queryKey: ['community-data'] });
+  };
+
+  const fetchPrograms = () => {
+    queryClient.invalidateQueries({ queryKey: ['community-data'] });
+  };
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
