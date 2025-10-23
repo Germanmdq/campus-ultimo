@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import ReactMarkdown from 'react-markdown';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { sendModuleCompletedEmail, sendCourseCompletedEmail, sendPostCourseRecommendationEmail } from '@/lib/email';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Lesson {
   id: string;
@@ -27,6 +28,13 @@ interface Lesson {
   has_assignment?: boolean;
   requires_admin_approval?: boolean;
   approval_form_url?: string | null;
+  materials?: Array<{
+    id: string;
+    title: string | null;
+    material_type: 'file' | 'link' | 'video' | null;
+    file_url: string | null;
+    url: string | null;
+  }>;
 }
 
 interface Course {
@@ -41,14 +49,16 @@ export default function CourseViewer() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { toast } = useToast();
-  const [course, setCourse] = useState<Course | null>(null);
+  const queryClient = useQueryClient();
   const [currentLesson, setCurrentLesson] = useState(0);
-  const [materials, setMaterials] = useState<Array<{ id: string; title: string | null; material_type: 'file' | 'link' | 'video' | null; file_url: string | null; url: string | null }>>([]);
-  const [loading, setLoading] = useState(true);
-  const canSubmitActions = !!profile && (profile.role === 'student' || profile.role === 'admin' || profile.role === 'formador');
-  // Popup de descripción removido; descripción se muestra inline
   const [formOpen, setFormOpen] = useState(false);
   const GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeQ4xFNiHQmqbBv0tJ3T6qfEPyjTc4zVNYyS_TEPHQqBzKChA/viewform';
+  const canSubmitActions = !!profile && (profile.role === 'student' || profile.role === 'admin' || profile.role === 'formador');
+
+  // Detectar si viene de un programa
+  const searchParams = new URLSearchParams(window.location.search);
+  const fromProgram = searchParams.get('from') === 'programa';
+  const programSlug = searchParams.get('programa');
 
   const toEmbeddedFormUrl = (url: string) => {
     try {
@@ -63,140 +73,107 @@ export default function CourseViewer() {
     }
   };
 
-  // Detectar si viene de un programa
-  const searchParams = new URLSearchParams(window.location.search);
-  const fromProgram = searchParams.get('from') === 'programa';
-  const programSlug = searchParams.get('programa');
+  // Query optimizada con React Query
+  const { data: courseData, isLoading, error } = useQuery({
+    queryKey: ['course-viewer', courseId, profile?.id],
+    queryFn: async () => {
+      if (!courseId) throw new Error('No course ID provided');
 
-  useEffect(() => {
-    if (courseId && profile?.id) {
-      fetchCourse();
-    }
-  }, [courseId, profile?.id]);
+      // Queries paralelas
+      const [courseResult, progressResult] = await Promise.all([
+        // Curso con lecciones en una sola query
+        supabase
+          .from('courses')
+          .select(`
+            id, title, summary,
+            lesson_courses (
+              lessons (*)
+            )
+          `)
+          .eq('slug', courseId)
+          .single(),
 
-  const fetchCourse = async () => {
-    try {
-      // Fetch course details by slug (courseId is actually the slug in the URL)
-      const { data: courseData, error: courseError } = await supabase
-        .from('courses')
-        .select('id, title, summary')
-        .eq('slug', courseId)
-        .single();
+        // Progreso del usuario
+        profile?.id
+          ? supabase
+              .from('lesson_progress')
+              .select('lesson_id, completed')
+              .eq('user_id', profile.id)
+          : Promise.resolve({ data: [], error: null })
+      ]);
 
-      if (courseError) throw courseError;
+      if (courseResult.error) throw courseResult.error;
 
-      // Fetch lessons for this course using lesson_courses (many-to-many)
-      const { data: lessonCoursesData, error: lessonsError } = await supabase
-        .from('lesson_courses')
-        .select(`
-          lessons (*)
-        `)
-        .eq('course_id', courseData.id);
-
-      if (lessonsError) throw lessonsError;
-
-      // Extract and sort lessons
-      const lessonsData = (lessonCoursesData || [])
-        .map(lc => lc.lessons)
+      // Extraer y ordenar lecciones
+      const lessonsData = (courseResult.data.lesson_courses || [])
+        .map((lc: any) => lc.lessons)
         .filter(Boolean)
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
 
-      // Fetch user progress if logged in
-      let progressData = [];
-      if (profile?.id) {
-        const { data } = await supabase
-          .from('lesson_progress')
-          .select('lesson_id, completed')
-          .eq('user_id', profile.id);
-        
-        progressData = data || [];
-      }
+      const progressData = progressResult.data || [];
 
-      // Combine lessons with progress
-  const lessonsWithProgress = (lessonsData || []).map((lesson, index) => {
-        const progress = progressData.find(p => p.lesson_id === lesson.id);
+      // Obtener todos los materiales de todas las lecciones EN PARALELO
+      const lessonIds = lessonsData.map((l: any) => l.id);
+      const { data: allMaterials } = lessonIds.length > 0
+        ? await supabase
+            .from('lesson_materials')
+            .select('id, title, material_type, file_url, url, sort_order, lesson_id')
+            .in('lesson_id', lessonIds)
+            .order('sort_order')
+        : { data: [] };
+
+      // Agrupar materiales por lección
+      const materialsByLesson = new Map<string, any[]>();
+      (allMaterials || []).forEach((m: any) => {
+        if (!materialsByLesson.has(m.lesson_id)) {
+          materialsByLesson.set(m.lesson_id, []);
+        }
+        materialsByLesson.get(m.lesson_id)!.push(m);
+      });
+
+      // Combinar lecciones con progreso
+      const lessonsWithProgress = lessonsData.map((lesson: any, index: number) => {
+        const progress = progressData.find((p: any) => p.lesson_id === lesson.id);
         const completed = progress?.completed || false;
-        
-        // First lesson is always unlocked
+
+        // Primera lección siempre desbloqueada
         let unlocked = index === 0;
-        
-        // Check if previous lesson is completed OR if user has required assignment approved
+
         if (index > 0) {
           const prevLesson = lessonsData[index - 1];
-          const prevProgress = progressData.find(p => p.lesson_id === prevLesson.id);
-          
-          // If previous lesson is completed
+          const prevProgress = progressData.find((p: any) => p.lesson_id === prevLesson.id);
+
           if (prevProgress?.completed) {
-            // If previous lesson has assignment, check if it's approved
-            if (prevLesson.has_assignment) {
-              // For now, assume approved if completed (we'll add assignment checking later)
-              unlocked = true;
-            } else {
-              unlocked = true;
-            }
+            unlocked = true;
           }
         }
 
         return {
           ...lesson,
           completed,
-          unlocked
+          unlocked,
+          materials: materialsByLesson.get(lesson.id) || []
         };
       });
 
-      setCourse({
-        ...courseData,
+      return {
+        ...courseResult.data,
         lessons: lessonsWithProgress
-      });
+      };
+    },
+    enabled: !!courseId,
+    staleTime: 1000 * 60 * 3, // Cache por 3 minutos
+    retry: 1,
+  });
 
-      // Load materials for the first/current lesson
-      const firstLesson = lessonsWithProgress[0];
-      console.log('🔍 FIRST LESSON:', firstLesson);
-      
-      if (firstLesson) {
-        console.log('🔍 FETCHING MATERIALS FOR LESSON:', firstLesson.id);
-        const { data: materialsData, error: materialsError } = await supabase
-          .from('lesson_materials')
-          .select('id, title, material_type, file_url, url, sort_order')
-          .eq('lesson_id', firstLesson.id)
-          .order('sort_order');
-        
-        if (materialsError) {
-          console.error('❌ Error fetching materials:', materialsError);
-        } else {
-          console.log('✅ Materials fetched:', materialsData);
-        }
-        setMaterials(materialsData || []);
-      } else {
-        console.log('❌ No first lesson found');
-        setMaterials([]);
-      }
-
-    } catch (error: any) {
-      console.error('Error fetching course:', error);
-      toast({
-        title: "Error",
-        description: "No se pudo cargar el curso",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const course = courseData || null;
+  const loading = isLoading;
 
   const handleLessonSelect = (index: number) => {
     const lesson = course?.lessons?.[index];
     if (lesson?.unlocked) {
       setCurrentLesson(index);
-      // Load materials for selected lesson
-      (async () => {
-        const { data: materialsData } = await supabase
-          .from('lesson_materials')
-          .select('id, title, material_type, file_url, url, sort_order')
-          .eq('lesson_id', lesson.id)
-          .order('sort_order');
-        setMaterials(materialsData || []);
-      })();
+      // Materials are already loaded in the lesson object
     }
   };
 
@@ -258,7 +235,7 @@ export default function CourseViewer() {
       }
 
       // Refresh course data to update progress
-      fetchCourse();
+      queryClient.invalidateQueries({ queryKey: ['course-viewer', courseId, profile?.id] });
 
     } catch (error: any) {
       toast({
@@ -398,27 +375,13 @@ export default function CourseViewer() {
               )}
 
               {/* 2) Materiales (solo si existen) */}
-              {materials.length > 0 && (
+              {currentLessonData.materials && currentLessonData.materials.length > 0 && (
                 <div className="space-y-3 mb-4">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4" />
                     <span className="font-medium">Materiales</span>
                   </div>
-                  <MaterialsSection materials={materials} />
-                  
-                  {/* TEST VISUAL DIRECTO */}
-                  <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 rounded">
-                    <h4 className="font-bold text-yellow-800">🧪 TEST DIRECTO:</h4>
-                    <p className="text-sm text-yellow-700">Si ves esto, el componente se está renderizando</p>
-                    <a 
-                      href="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf?download=dummy.pdf"
-                      className="inline-block mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      🔗 Test PDF (debería abrir)
-                    </a>
-                  </div>
+                  <MaterialsSection materials={currentLessonData.materials} />
                 </div>
               )}
 

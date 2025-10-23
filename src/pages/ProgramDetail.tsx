@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { AddCoursesToProgramDialog } from '@/components/admin/AddCoursesToProgramDialog';
 import { EnrollUsersDialog } from '@/components/admin/EnrollUsersDialog';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Program {
   id: string;
@@ -38,15 +39,13 @@ export default function ProgramDetail() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { toast } = useToast();
-  
-  const [program, setProgram] = useState<Program | null>(null);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAddCourses, setShowAddCourses] = useState(false);
   const [showEnrollUsers, setShowEnrollUsers] = useState(false);
-  
+
   const [editForm, setEditForm] = useState({
     title: '',
     summary: '',
@@ -56,86 +55,65 @@ export default function ProgramDetail() {
 
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
 
-  useEffect(() => {
-    if (slug) {
-      fetchProgramDetails();
-    }
-  }, [slug]);
+  // Query optimizada con React Query
+  const { data, isLoading: loading, error } = useQuery({
+    queryKey: ['program-detail', slug],
+    queryFn: async () => {
+      if (!slug) throw new Error('No slug provided');
 
-  const fetchProgramDetails = async () => {
-    setLoading(true);
-    try {
-      // Fetch program
+      // Fetch program con cursos en una sola query
       const { data: programData, error: programError } = await supabase
         .from('programs')
-        .select('*')
+        .select(`
+          *,
+          program_courses (
+            sort_order,
+            courses (
+              id,
+              title,
+              summary,
+              slug,
+              sort_order,
+              published_at
+            )
+          )
+        `)
         .eq('slug', slug)
         .single();
 
       if (programError) throw programError;
-      setProgram(programData);
-      setEditForm({
-        title: programData.title,
-        summary: programData.summary || '',
-        poster_2x3_url: programData.poster_2x3_url || '',
-        wide_11x6_url: programData.wide_11x6_url || ''
-      });
 
-      // Fetch courses in this program - try both methods
-      let coursesData: any[] = [];
-      
-      // Method 1: Try program_courses table (many-to-many)
-      const { data: programCoursesData, error: programCoursesError } = await supabase
-        .from('program_courses')
-        .select(`
-          courses (
-            id,
-            title,
-            summary,
-            slug,
-            sort_order,
-            published_at
-          )
-        `)
-        .eq('program_id', programData.id)
-        .order('sort_order');
+      // Extraer cursos de program_courses
+      const coursesData = (programData.program_courses || [])
+        .map((pc: any) => pc.courses)
+        .filter(Boolean)
+        .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
 
-      if (!programCoursesError && programCoursesData && programCoursesData.length > 0) {
-        coursesData = programCoursesData.map(pc => pc.courses).filter(Boolean);
-      } else {
-        // Method 2: Fallback to direct program_id relationship
-        const { data: directCoursesData, error: directCoursesError } = await supabase
-          .from('courses')
-          .select(`
-            id,
-            title,
-            summary,
-            slug,
-            sort_order,
-            published_at
-          `)
-          .eq('program_id', programData.id)
-          .order('sort_order');
+      return {
+        program: programData,
+        courses: coursesData
+      };
+    },
+    enabled: !!slug,
+    staleTime: 1000 * 60 * 3, // Cache por 3 minutos
+    retry: 1,
+  });
 
-        if (directCoursesError) {
-          console.error('Error loading courses via direct relationship:', directCoursesError);
-          throw directCoursesError;
-        }
-        coursesData = directCoursesData || [];
-      }
+  const program = data?.program || null;
+  const courses = data?.courses || [];
 
-      setCourses(coursesData);
-      
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "No se pudo cargar el programa",
-        variant: "destructive",
-      });
-      navigate('/programas');
-    } finally {
-      setLoading(false);
-    }
+  // Actualizar editForm cuando se carga el programa
+  if (program && editForm.title === '' && !editing) {
+    setEditForm({
+      title: program.title,
+      summary: program.summary || '',
+      poster_2x3_url: program.poster_2x3_url || '',
+      wide_11x6_url: program.wide_11x6_url || ''
+    });
+  }
+
+  const fetchProgramDetails = () => {
+    queryClient.invalidateQueries({ queryKey: ['program-detail', slug] });
   };
 
   const handleSave = async () => {
@@ -160,13 +138,8 @@ export default function ProgramDetail() {
         description: "Los cambios han sido guardados exitosamente",
       });
 
-      setProgram({
-        ...program,
-        title: editForm.title,
-        summary: editForm.summary,
-        poster_2x3_url: editForm.poster_2x3_url,
-        wide_11x6_url: editForm.wide_11x6_url
-      });
+      // Refrescar cache
+      queryClient.invalidateQueries({ queryKey: ['program-detail', slug] });
       setEditing(false);
     } catch (error: any) {
       toast({
@@ -192,7 +165,8 @@ export default function ProgramDetail() {
 
       if (error) throw error;
 
-      setProgram({ ...program, published_at: newPublishedAt });
+      // Refrescar cache
+      queryClient.invalidateQueries({ queryKey: ['program-detail', slug] });
       toast({
         title: newPublishedAt ? "Programa publicado" : "Programa despublicado",
         description: newPublishedAt ? "El programa ya está visible para los estudiantes" : "El programa ya no es visible para los estudiantes",
