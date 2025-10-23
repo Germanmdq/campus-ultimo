@@ -103,4 +103,14 @@ export async function sendInactivityEmail(params: { to: string; days: number; ct
   return sendEmail({ to: params.to, subject, html });
 }
 
-
+export async function sendSupportEmail(params: { from: string; message: string }) {
+  const subject = `Consulta de soporte desde el Campus`;
+  const body = `
+    <p><strong>Email del usuario:</strong> ${params.from}</p>
+    <p><strong>Mensaje:</strong></p>
+    <p style="white-space: pre-wrap;">${params.message}</p>
+  `;
+  const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/Logo-email.png` : undefined;
+  const html = baseHtmlTemplate({ title: subject, body, logoUrl });
+  return sendEmail({ to: 'soporte@espaciodegeometriasagrada.com', subject, html });
+}

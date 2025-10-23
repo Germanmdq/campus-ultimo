@@ -79,29 +79,19 @@ export default function CourseViewer() {
     queryFn: async () => {
       if (!courseId) throw new Error('No course ID provided');
 
-      // PASO 1: Obtener el curso para conseguir el ID
-      const courseResult = await supabase
-        .from('courses')
-        .select('id, title, summary')
-        .eq('slug', courseId)
-        .single();
-
-      if (courseResult.error) throw courseResult.error;
-
-      const course_id = courseResult.data.id;
-      console.log('🔍 Course ID:', course_id);
-
-      // PASO 2: Queries paralelas con el course_id
-      const [lessonCoursesResult, progressResult] = await Promise.all([
-        // Obtener las lecciones a través de lesson_courses (many-to-many)
+      // Queries paralelas
+      const [courseResult, progressResult] = await Promise.all([
+        // Curso con lecciones en una sola query
         supabase
-          .from('lesson_courses')
+          .from('courses')
           .select(`
-            sort_order,
-            lessons (*)
+            id, title, summary,
+            lesson_courses (
+              lessons (*)
+            )
           `)
-          .eq('course_id', course_id)
-          .order('sort_order'),
+          .eq('slug', courseId)
+          .single(),
 
         // Progreso del usuario
         profile?.id
@@ -112,22 +102,19 @@ export default function CourseViewer() {
           : Promise.resolve({ data: [], error: null })
       ]);
 
-      if (lessonCoursesResult.error) {
-        console.error('🔍 ERROR querying lesson_courses:', lessonCoursesResult.error);
-        throw lessonCoursesResult.error;
-      }
+      if (courseResult.error) throw courseResult.error;
 
       console.log('🔍 Course data received:', courseResult.data);
-      console.log('🔍 lesson_courses count:', lessonCoursesResult.data?.length);
-      console.log('🔍 lesson_courses raw data:', lessonCoursesResult.data);
+      console.log('🔍 lesson_courses count:', courseResult.data.lesson_courses?.length);
 
-      // Extraer y ordenar lecciones desde lesson_courses
-      const lessonsData = (lessonCoursesResult.data || [])
+      // Extraer y ordenar lecciones
+      const lessonsData = (courseResult.data.lesson_courses || [])
         .map((lc: any) => {
           console.log('🔍 lesson_course entry:', lc);
           return lc.lessons;
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
 
       console.log('🔍 Total lessons found:', lessonsData.length);
       console.log('🔍 Lessons:', lessonsData.map((l: any) => ({ id: l.id, title: l.title })));
