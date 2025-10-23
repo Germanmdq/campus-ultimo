@@ -104,11 +104,20 @@ export default function CourseViewer() {
 
       if (courseResult.error) throw courseResult.error;
 
+      console.log('🔍 Course data received:', courseResult.data);
+      console.log('🔍 lesson_courses count:', courseResult.data.lesson_courses?.length);
+
       // Extraer y ordenar lecciones
       const lessonsData = (courseResult.data.lesson_courses || [])
-        .map((lc: any) => lc.lessons)
+        .map((lc: any) => {
+          console.log('🔍 lesson_course entry:', lc);
+          return lc.lessons;
+        })
         .filter(Boolean)
         .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      console.log('🔍 Total lessons found:', lessonsData.length);
+      console.log('🔍 Lessons:', lessonsData.map((l: any) => ({ id: l.id, title: l.title })));
 
       const progressData = progressResult.data || [];
 
