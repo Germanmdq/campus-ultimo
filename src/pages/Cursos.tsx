@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { CreateCourseForm } from '@/components/admin/CreateCourseForm';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Course {
   id: string;
@@ -30,19 +31,15 @@ export default function Cursos() {
   const { profile, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [courses, setCourses] = useState<GroupedCourse[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const role = (profile?.role || '').toString();
   const isTeacherOrAdmin = ['formador','teacher','profesor','admin'].includes(role);
 
-  useEffect(() => {
-    fetchCourses();
-  }, [profile?.role]);
-
-  const fetchCourses = async () => {
-    setLoading(true);
-    try {
+  // Query optimizada con React Query
+  const { data: courses = [], isLoading: loading } = useQuery({
+    queryKey: ['courses-list', user?.id, isTeacherOrAdmin],
+    queryFn: async () => {
       if (isTeacherOrAdmin) {
         const { data, error } = await supabase
           .from('courses')
@@ -76,71 +73,76 @@ export default function Cursos() {
           .map(([programTitle, list]) => ({ programTitle, courses: list }))
           .sort((a, b) => a.programTitle.localeCompare(b.programTitle));
 
-        setCourses(grouped);
-        return;
+        return grouped;
       }
 
-      // Estudiante: mostrar cursos de sus programas + cursos individuales inscritos (publicados)
-      if (!user) {
-        setCourses([]);
-        return;
+      // Estudiante: queries PARALELAS en lugar de secuenciales
+      if (!user) return [];
+
+      const [courseEnrollmentsResult, programEnrollmentsResult] = await Promise.all([
+        // Inscripciones a cursos individuales
+        supabase
+          .from('course_enrollments')
+          .select('course_id')
+          .eq('user_id', user.id)
+          .eq('status', 'active'),
+
+        // Inscripciones a programas
+        supabase
+          .from('enrollments')
+          .select('program_id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+      ]);
+
+      const enrolledCourseIds = (courseEnrollmentsResult.data || []).map(e => e.course_id);
+      const myProgramIds = (programEnrollmentsResult.data || []).map(p => p.program_id);
+
+      // Segunda ronda de queries paralelas
+      const queries: Promise<any>[] = [];
+
+      // Cursos individuales
+      if (enrolledCourseIds.length > 0) {
+        queries.push(
+          supabase
+            .from('courses')
+            .select(`
+              id, title, summary, slug, sort_order,
+              poster_2x3_url, wide_11x6_url, published_at,
+              program_courses (program_id)
+            `)
+            .in('id', enrolledCourseIds)
+            .not('published_at', 'is', null)
+            .order('sort_order')
+        );
+      } else {
+        queries.push(Promise.resolve({ data: [] }));
       }
 
-      // 1) Traer enrollments de cursos individuales
-      const { data: courseEnrollments, error: ceError } = await supabase
-        .from('course_enrollments')
-        .select('course_id')
-        .eq('user_id', user.id)
-        .eq('status', 'active');
+      // Cursos de programas
+      if (myProgramIds.length > 0) {
+        queries.push(
+          supabase
+            .from('program_courses')
+            .select('program_id, courses (id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at)')
+            .in('program_id', myProgramIds)
+            .order('program_id')
+        );
+      } else {
+        queries.push(Promise.resolve({ data: [] }));
+      }
 
-      if (ceError) throw ceError;
+      const [coursesResult, programCoursesResult] = await Promise.all(queries);
 
-      const enrolledCourseIds = (courseEnrollments || []).map(e => e.course_id);
-      // No cortar aquí: también puede ver cursos de programas inscritos
-
-      // 2) Traer esos cursos, solo si publicados, y que sean individuales (sin program_courses)
-      const { data: coursesData, error: coursesError } = await supabase
-        .from('courses')
-        .select(`
-          id,
-          title,
-          summary,
-          slug,
-          sort_order,
-          poster_2x3_url,
-          wide_11x6_url,
-          published_at,
-          program_courses (program_id)
-        `)
-        .in('id', enrolledCourseIds.length > 0 ? enrolledCourseIds : ["00000000-0000-0000-0000-000000000000"]) // evita error si vacío
-        .not('published_at', 'is', null)
-        .order('sort_order');
-
-      if (coursesError) throw coursesError;
-
-      const individualPublished = (coursesData || []).filter(course => 
+      // Procesar cursos individuales (sin program_courses)
+      const individualPublished = (coursesResult.data || []).filter((course: any) =>
         !course.program_courses || course.program_courses.length === 0
       );
 
-      // 3) Traer cursos que pertenecen a los programas del alumno
-      const { data: myPrograms } = await supabase
-        .from('enrollments')
-        .select('program_id')
-        .eq('user_id', user.id)
-        .eq('status', 'active');
-
-      const myProgramIds = (myPrograms || []).map(p => p.program_id);
-      let programCourses: any[] = [];
-      if (myProgramIds.length > 0) {
-        const { data: pc } = await supabase
-          .from('program_courses')
-          .select('program_id, courses (id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at)')
-          .in('program_id', myProgramIds)
-          .order('program_id');
-        programCourses = pc || [];
-      }
-
+      // Procesar cursos de programas
+      const programCourses = programCoursesResult.data || [];
       const grouped: GroupedCourse[] = [];
+
       if (programCourses.length > 0) {
         const byProgram: Record<string, Course[]> = {};
         for (const row of programCourses) {
@@ -158,16 +160,14 @@ export default function Cursos() {
         grouped.push({ programTitle: 'Mis cursos individuales', courses: individualPublished });
       }
 
-      setCourses(grouped);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los cursos",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+      return grouped;
+    },
+    enabled: !!profile?.role,
+    staleTime: 1000 * 60 * 5, // Cache por 5 minutos
+  });
+
+  const fetchCourses = () => {
+    queryClient.invalidateQueries({ queryKey: ['courses-list'] });
   };
 
   const handleViewCourse = (slug: string) => {
