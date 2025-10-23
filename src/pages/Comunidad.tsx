@@ -186,10 +186,6 @@ export default function Comunidad() {
     queryClient.invalidateQueries({ queryKey: ['community-data'] });
   };
 
-  const fetchPrograms = () => {
-    queryClient.invalidateQueries({ queryKey: ['community-data'] });
-  };
-
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selectedImage) {
@@ -207,189 +203,6 @@ export default function Comunidad() {
       document.body.style.overflow = '';
     };
   }, [selectedImage]);
-
-  const fetchPosts = async () => {
-    setLoading(true);
-    try {
-      if (!user) {
-        console.log('No user logged in, skipping posts fetch');
-        setPosts([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('forum_posts')
-        .select(`
-          id,
-          title,
-          content,
-          category,
-          pinned,
-          created_at,
-          author_id,
-          forum_id,
-          profiles (
-            full_name,
-            role,
-            avatar_url
-          ),
-          forum_post_likes (
-            id,
-            user_id
-          ),
-          forum_post_replies (
-            id
-          ),
-          forum_post_files (
-            id,
-            file_url,
-            file_name,
-            file_type,
-            file_size
-          )
-        `)
-        .order('pinned', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching posts:', error);
-        throw error;
-      }
-
-      const validPosts = (data || []).filter((post: any) => post.profiles);
-
-      const processedPosts = validPosts.map((post: any) => ({
-        ...post,
-        author_name: post.profiles?.full_name || 'Usuario',
-        author_role: post.profiles?.role || 'student',
-        author_avatar_url: post.profiles?.avatar_url || null,
-        likes_count: post.forum_post_likes?.length || 0,
-        replies_count: post.forum_post_replies?.length || 0,
-        is_liked: user ? post.forum_post_likes?.some((like: any) => like.user_id === user.id) : false,
-        files: post.forum_post_files || []
-      }));
-
-      setPosts(processedPosts);
-    } catch (error: any) {
-      console.error('Error in fetchPosts:', error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las publicaciones",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchForums = async () => {
-    try {
-      if (!user) {
-        console.log('No user logged in, skipping forums fetch');
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      const userRole = profile?.role as string;
-
-      if (userRole === 'admin' || userRole === 'formador' || userRole === 'voluntario') {
-        const { data, error } = await supabase
-          .from('forums')
-          .select(`
-            id,
-            name,
-            description,
-            program_id,
-            cover_image_url,
-            programs (title)
-          `)
-          .order('name');
-
-        if (error) {
-          console.error('Error fetching forums:', error);
-          toast({
-            title: "Error",
-            description: "No se pudieron cargar los foros",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        setForums(data || []);
-        return;
-      }
-
-      const { data: userPrograms, error: userProgramsError } = await supabase
-        .from('enrollments')
-        .select('program_id')
-        .eq('user_id', user.id);
-
-      if (userProgramsError) {
-        console.error('Error fetching user programs:', userProgramsError);
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar los programas del usuario",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!userPrograms || userPrograms.length === 0) {
-        console.log('User not enrolled in any programs');
-        setForums([]);
-        return;
-      }
-
-      const programIds = userPrograms.map(up => up.program_id);
-
-      const { data, error } = await supabase
-        .from('forums')
-        .select(`
-          id,
-          name,
-          description,
-          program_id,
-          cover_image_url,
-          programs (title)
-        `)
-        .in('program_id', programIds)
-        .order('name');
-
-      if (error) {
-        console.error('Error fetching forums:', error);
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar los foros",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setForums(data || []);
-    } catch (error) {
-      console.error('Error in fetchForums:', error);
-      toast({
-        title: "Error",
-        description: "Error al cargar los foros",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const fetchPrograms = async () => {
-    const { data } = await supabase
-      .from('programs')
-      .select('id, title')
-      .order('title');
-
-    setPrograms(data || []);
-  };
 
   const uploadForumCoverImage = async (file: File): Promise<string | null> => {
     try {
@@ -1014,22 +827,6 @@ export default function Comunidad() {
     return matchesSearch && matchesCategory && matchesForum;
   });
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  };
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return 'Fecha inválida';
-      }
-      return formatDistanceToNow(date, { addSuffix: true, locale: es });
-    } catch (error) {
-      console.error('Error formatting date:', dateString, error);
-      return 'Fecha inválida';
-    }
-  };
 
   if (loading) {
     return (
@@ -1430,7 +1227,7 @@ export default function Comunidad() {
                               {post.author_name}
                             </h4>
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <span>{formatDate(post.created_at)}</span>
+                              <span>{formatRelativeTime(post.created_at)}</span>
                               <span>·</span>
                               <Badge variant="outline" className="text-xs">
                                 {post.author_role === 'formador' || post.author_role === 'teacher' ? 'Profesor' :
@@ -1556,7 +1353,7 @@ export default function Comunidad() {
                                 </div>
                                 <div className="flex items-center gap-3 px-3 mt-1">
                                   <span className="text-xs text-muted-foreground">
-                                    {formatDate(reply.created_at)}
+                                    {formatRelativeTime(reply.created_at)}
                                   </span>
                                   {(reply.author_id === user?.id || isTeacherOrAdmin) && (
                                     <>
