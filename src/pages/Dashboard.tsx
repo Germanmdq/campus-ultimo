@@ -6,7 +6,10 @@ import { usePrograms } from '@/hooks/usePrograms';
 import { useUserStats } from '@/hooks/useUserStats';
 import { useAuth } from '@/hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import { formatEventDate } from '@/lib/utils/date';
+
 type CourseCard = {
   id: string;
   title: string;
@@ -15,7 +18,6 @@ type CourseCard = {
   poster_2x3_url?: string | null;
   wide_11x6_url?: string | null;
 };
-import { supabase } from '@/integrations/supabase/client';
 
 interface Event {
   id: string;
@@ -32,148 +34,79 @@ export default function Dashboard() {
   const { programs, loading: programsLoading } = usePrograms();
   const { stats, loading: statsLoading } = useUserStats();
   const { profile } = useAuth();
-  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
-  const [myCourses, setMyCourses] = useState<CourseCard[]>([]);
 
-  useEffect(() => {
-    const fetchUpcomingEvents = async () => {
-      if (!profile) return;
-      
-      try {
-        // Eventos relevantes: campus o de programas/cursos del usuario
-        const { data: myPrograms } = await supabase
+  // Query optimizada con React Query - eventos y cursos en paralelo
+  const { data: dashboardData, isLoading: dataLoading } = useQuery({
+    queryKey: ['dashboard-data', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return { events: [], courses: [] };
+
+      // Ejecutar todas las queries EN PARALELO
+      const [
+        enrollmentsResult,
+        courseEnrollmentsResult,
+        eventsResult
+      ] = await Promise.all([
+        // Inscripciones a programas
+        supabase
           .from('enrollments')
           .select('program_id')
           .eq('user_id', profile.id)
-          .eq('status', 'active');
-        const programIds = (myPrograms || []).map(p => p.program_id);
-        const { data: myCoursesEnroll } = await supabase
-          .from('course_enrollments')
-          .select('course_id')
-          .eq('user_id', profile.id)
-          .eq('status', 'active');
-        const courseIds = (myCoursesEnroll || []).map(c => c.course_id);
+          .eq('status', 'active'),
 
-        let dataRes = null as any;
-        let errorRes = null as any;
-        try {
-          const { data, error } = await supabase
-            .from('events')
-            .select('*')
-            .gte('start_at', new Date().toISOString())
-            .or([
-              'target_scope.eq.campus',
-              programIds.length ? `and(target_scope.eq.program,program_id.in.(${programIds.join(',')}))` : '',
-              courseIds.length ? `and(target_scope.eq.course,course_id.in.(${courseIds.join(',')}))` : ''
-            ].filter(Boolean).join(','))
-            .order('start_at', { ascending: true })
-            .limit(5);
-          dataRes = data; errorRes = error;
-        } catch (e) {
-          errorRes = e;
-        }
-
-        if (errorRes) {
-          // Fallback para esquemas sin columnas nuevas
-          const { data } = await supabase
-            .from('events')
-            .select('*')
-            .gte('start_at', new Date().toISOString())
-            .order('start_at', { ascending: true })
-            .limit(5);
-          setUpcomingEvents(data || []);
-        } else {
-          setUpcomingEvents(dataRes || []);
-        }
-      } catch (error) {
-        console.error('Error fetching events:', error);
-      }
-    };
-
-    fetchUpcomingEvents();
-  }, [profile]);
-
-  useEffect(() => {
-    const fetchMyCourses = async () => {
-      if (!profile?.id) {
-        setMyCourses([]);
-        return;
-      }
-
-      try {
-        // Cursos desde programas inscritos
-        const { data: myPrograms } = await supabase
-          .from('enrollments')
-          .select('program_id')
-          .eq('user_id', profile.id)
-          .eq('status', 'active');
-
-        const programIds = (myPrograms || []).map(p => p.program_id);
-
-        let programCourses: any[] = [];
-        if (programIds.length > 0) {
-          const { data: pc } = await supabase
-            .from('program_courses')
-            .select('courses (id, title, summary, slug, poster_2x3_url, wide_11x6_url)')
-            .in('program_id', programIds)
-            .order('program_id');
-          programCourses = pc || [];
-        }
-
-        const coursesFromPrograms = programCourses
-          .map(row => row.courses)
-          .filter(Boolean);
-        // Bundle real: derivar por inscripciones activas -> program_courses
-        const { data: activeEnrs } = await supabase
-          .from('enrollments')
-          .select('program_id')
-          .eq('user_id', profile.id)
-          .eq('status', 'active');
-        const activeProgramIds = (activeEnrs || []).map((e: any) => e.program_id).filter(Boolean);
-        let bundledCourseIds = new Set<string>();
-        if (activeProgramIds.length > 0) {
-          const { data: pcRows } = await supabase
-            .from('program_courses')
-            .select('course_id')
-            .in('program_id', activeProgramIds);
-          (pcRows || []).forEach((row: any) => { if (row.course_id) bundledCourseIds.add(row.course_id); });
-        }
-
-        // Cursos individuales inscritos
-        const { data: ce } = await supabase
+        // Inscripciones a cursos individuales
+        supabase
           .from('course_enrollments')
           .select('courses (id, title, summary, slug, poster_2x3_url, wide_11x6_url)')
           .eq('user_id', profile.id)
-          .eq('status', 'active');
+          .eq('status', 'active'),
 
-        const individualCourses = (ce || [])
-          .map(row => row.courses)
-          .filter(Boolean)
-          // bundle logic: hide individual courses included in enrolled programs
-          .filter((c: any) => !bundledCourseIds.has(c.id));
+        // Eventos próximos (fallback sin columnas nuevas)
+        supabase
+          .from('events')
+          .select('*')
+          .gte('start_at', new Date().toISOString())
+          .order('start_at', { ascending: true })
+          .limit(5)
+      ]);
 
-        // Mostrar solo cursos individuales que no estén incluidos en programas inscritos
-        setMyCourses(individualCourses as any[]);
-      } catch (error) {
-        console.error('Error fetching my courses:', error);
-        setMyCourses([]);
+      const programIds = (enrollmentsResult.data || []).map(p => p.program_id);
+
+      // Obtener cursos de programas inscritos (solo si hay programas)
+      let programCoursesResult = { data: [] as any[] };
+      if (programIds.length > 0) {
+        programCoursesResult = await supabase
+          .from('program_courses')
+          .select('course_id, courses (id, title, summary, slug, poster_2x3_url, wide_11x6_url)')
+          .in('program_id', programIds);
       }
-    };
 
-    fetchMyCourses();
-  }, [profile?.id]);
+      // Crear Set de cursos incluidos en programas
+      const bundledCourseIds = new Set(
+        (programCoursesResult.data || [])
+          .map((pc: any) => pc.course_id)
+          .filter(Boolean)
+      );
 
-  const formatEventDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES', { 
-      day: 'numeric', 
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+      // Cursos individuales (excluyendo los que ya están en programas)
+      const individualCourses = (courseEnrollmentsResult.data || [])
+        .map((row: any) => row.courses)
+        .filter(Boolean)
+        .filter((c: any) => !bundledCourseIds.has(c.id));
 
-  if (programsLoading || statsLoading) {
+      return {
+        events: eventsResult.data || [],
+        courses: individualCourses
+      };
+    },
+    enabled: !!profile?.id,
+    staleTime: 1000 * 60 * 5, // Cache por 5 minutos
+  });
+
+  const upcomingEvents = dashboardData?.events || [];
+  const myCourses = dashboardData?.courses || [];
+
+  if (programsLoading || statsLoading || dataLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
