@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen, GraduationCap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 type CourseCard = {
   id: string;
@@ -18,136 +19,91 @@ type CourseCard = {
 
 export default function MiFormacion() {
   const { profile } = useAuth();
-  const [myCourses, setMyCourses] = useState<CourseCard[]>([]);
-  const [myPrograms, setMyPrograms] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchMyCourses = async () => {
-      if (!profile?.id) {
-        setMyCourses([]);
-        setLoading(false);
-        return;
-      }
+  // Query optimizada con React Query y queries en paralelo
+  const { data, isLoading } = useQuery({
+    queryKey: ['my-formacion', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return { programs: [], courses: [] };
 
-      try {
-        // Programas inscritos
-        const { data: enrollmentsData } = await supabase
+      // Ejecutar queries en paralelo
+      const [enrollmentsResult, courseEnrollmentsResult] = await Promise.all([
+        // Programas con sus cursos
+        supabase
           .from('enrollments')
           .select(`
             program_id,
-            programs (
-              id,
-              title,
-              summary,
-              slug,
-              poster_2x3_url,
-              wide_11x6_url,
-              published_at,
-              program_courses (
-                course_id,
-                courses (
-                  id,
-                  title,
-                  summary,
-                  slug,
-                  poster_2x3_url,
-                  wide_11x6_url,
-                  published_at
-                )
-              )
+            programs!inner (
+              id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at
             )
           `)
-          .eq('user_id', profile.id);
+          .eq('user_id', profile.id)
+          .eq('status', 'active'),
 
-        const enrolledPrograms = (enrollmentsData || [])
-          .map(row => {
-            const program = row.programs;
-            if (!program) return null;
-
-            // Extraer cursos del programa
-            const courses = (program.program_courses || [])
-              .map(pc => pc.courses)
-              .filter(Boolean);
-
-            return {
-              ...program,
-              courses: courses
-            };
-          })
-          .filter(Boolean);
-
-        setMyPrograms(enrolledPrograms);
-
-        const programIds = (enrollmentsData || []).map(p => p.program_id);
-
-        let programCourses: any[] = [];
-        if (programIds.length > 0) {
-          const { data: pc } = await supabase
-            .from('program_courses')
-            .select('courses (id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at)')
-            .in('program_id', programIds)
-            .order('program_id');
-          programCourses = pc || [];
-        }
-
-        const coursesFromPrograms = programCourses
-          .map(row => row.courses)
-          .filter(Boolean);
-
-        // Cursos individuales inscritos
-        const { data: ce } = await supabase
+        // Cursos individuales
+        supabase
           .from('course_enrollments')
-          .select('course_id')
-          .eq('user_id', profile.id);
+          .select(`
+            course_id,
+            courses!inner (
+              id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at
+            )
+          `)
+          .eq('user_id', profile.id)
+          .eq('status', 'active')
+      ]);
 
-        // Obtener los cursos individuales
-        let enrolledCourses: any[] = [];
-        if (ce && ce.length > 0) {
-          const courseIds = ce.map(row => row.course_id);
-          const { data: coursesData } = await supabase
-            .from('courses')
-            .select('id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at')
-            .in('id', courseIds);
+      // Extraer programas
+      const programs = (enrollmentsResult.data || [])
+        .map(e => e.programs)
+        .filter(Boolean);
 
-          enrolledCourses = coursesData || [];
-        }
+      // Obtener IDs de programas para buscar sus cursos
+      const programIds = programs.map(p => p.id);
 
-        // Filtrar cursos individuales que no estén en programas
-        const coursesInPrograms = coursesFromPrograms.map(c => c.id);
-        const individualCourses = enrolledCourses.filter(course =>
-          !coursesInPrograms.includes(course.id)
-        );
+      // Cursos de programas (solo si hay programas)
+      let programCourses: any[] = [];
+      if (programIds.length > 0) {
+        const { data: pc } = await supabase
+          .from('program_courses')
+          .select(`
+            courses!inner (id, title, summary, slug, poster_2x3_url, wide_11x6_url, published_at)
+          `)
+          .in('program_id', programIds);
 
-        // Combinar TODOS los cursos: de programas + individuales filtrados
-        const allCourses = [...coursesFromPrograms, ...individualCourses];
-
-        setMyCourses(allCourses);
-      } catch (error) {
-        console.error('Error fetching formación:', error);
-      } finally {
-        setLoading(false);
+        programCourses = (pc || []).map(row => row.courses).filter(Boolean);
       }
-    };
 
-    fetchMyCourses();
-  }, [profile?.id]);
+      // Cursos individuales
+      const individualCourses = (courseEnrollmentsResult.data || [])
+        .map(e => e.courses)
+        .filter(Boolean);
 
-  if (loading) {
+      // Combinar cursos evitando duplicados
+      const courseIds = new Set(programCourses.map((c: any) => c.id));
+      const uniqueIndividualCourses = individualCourses.filter(
+        (c: any) => !courseIds.has(c.id)
+      );
+
+      return {
+        programs,
+        programCourses,
+        individualCourses: uniqueIndividualCourses
+      };
+    },
+    enabled: !!profile?.id,
+    staleTime: 1000 * 60 * 5, // Cache por 5 minutos
+  });
+
+  const { programs = [], programCourses = [], individualCourses = [] } = data || {};
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
-
-  const coursesInPrograms = myPrograms.flatMap(p =>
-    (p.courses || []).map(c => c.id)
-  );
-
-  const individualCourses = myCourses.filter(c =>
-    !coursesInPrograms.includes(c.id)
-  );
 
   return (
     <div className="space-y-8">
@@ -158,15 +114,15 @@ export default function MiFormacion() {
       </div>
 
       {/* Programas */}
-      {myPrograms.length > 0 && (
+      {programs.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <GraduationCap className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold">Mis Programas</h2>
-            <Badge variant="secondary">{myPrograms.length}</Badge>
+            <Badge variant="secondary">{programs.length}</Badge>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {myPrograms.map((program) => (
+            {programs.map((program: any) => (
               <Link key={`program-${program.id}`} to={`/programas/${program.slug}`}>
                 <Card className="overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group">
                   <div className="aspect-[2/3] bg-gradient-to-br from-primary/20 to-primary/10 relative overflow-hidden">
@@ -190,11 +146,6 @@ export default function MiFormacion() {
                     <h3 className="font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
                       {program.title}
                     </h3>
-                    {program.courses && program.courses.length > 0 && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {program.courses.length} curso{program.courses.length !== 1 ? 's' : ''}
-                      </p>
-                    )}
                   </CardContent>
                 </Card>
               </Link>
@@ -248,7 +199,7 @@ export default function MiFormacion() {
       )}
 
       {/* Empty State */}
-      {myPrograms.length === 0 && individualCourses.length === 0 && (
+      {programs.length === 0 && individualCourses.length === 0 && (
         <div className="text-center py-12">
           <GraduationCap className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
           <h3 className="text-lg font-semibold mb-2">Aún no estás inscrito en ningún programa o curso</h3>

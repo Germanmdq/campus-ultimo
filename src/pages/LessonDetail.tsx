@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { LessonMaterialsDialog } from '@/components/admin/LessonMaterialsDialog';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface Lesson {
   id: string;
@@ -46,110 +47,115 @@ export default function LessonDetail() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { toast } = useToast();
-  
-  const [lesson, setLesson] = useState<Lesson | null>(null);
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
   const [showMaterials, setShowMaterials] = useState(false);
   const [dropboxLink, setDropboxLink] = useState('');
   const [textAnswer, setTextAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
   const isTeacherOrAdmin = profile?.role === 'formador' || profile?.role === 'admin';
 
-  useEffect(() => {
-    if (slug) {
-      fetchLessonDetails();
-    }
-  }, [slug]);
+  // Query optimizada de lesson con todos los datos
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['lesson-detail', slug, profile?.id],
+    queryFn: async () => {
+      if (!slug) throw new Error('No slug provided');
 
-  const fetchLessonDetails = async () => {
-    setLoading(true);
-    try {
-      // Fetch lesson using lesson_courses for proper course association
-      const { data: lessonData, error: lessonError } = await supabase
-        .from('lessons')
-        .select(`
-          *,
-          lesson_courses (
-            courses (
-              title,
-              programs (title)
+      // Queries en paralelo
+      const [lessonResult, materialsResult, assignmentResult] = await Promise.all([
+        // Lesson con course info
+        supabase
+          .from('lessons')
+          .select(`
+            *,
+            lesson_courses(
+              courses(
+                title,
+                programs(title)
+              )
             )
-          )
-        `)
-        .eq('slug', slug)
-        .maybeSingle();
+          `)
+          .eq('slug', slug)
+          .maybeSingle(),
 
-      if (lessonError) throw lessonError;
-      
-      // Set the course info from the first associated course
-      const courseInfo = lessonData.lesson_courses?.[0]?.courses;
-      const lessonWithCourse = {
-        ...lessonData,
-        course: courseInfo ? {
-          title: courseInfo.title,
-          program: courseInfo.programs
-        } : null
-      };
-      
-      setLesson(lessonWithCourse);
+        // Materials
+        supabase
+          .from('lesson_materials')
+          .select('*')
+          .eq('slug', slug) // Usamos slug primero para evitar query extra
+          .order('sort_order'),
 
-    // Fetch materials ALWAYS - not depending on has_materials flag
-    const { data: materialsData, error: materialsError } = await supabase
-      .from('lesson_materials')
-      .select('*')
-      .eq('lesson_id', lessonData.id)
-      .order('sort_order');
-    
-    if (materialsError) {
-      console.error('Error fetching materials:', materialsError);
-    }
-    
-    // ✅ MAPEAR material_type a type para que coincida con la interface Material
-    const mappedMaterials = (materialsData || []).map(m => ({
-      id: m.id,
-      title: m.title,
-      type: m.material_type as 'file' | 'link',
-      file_url: m.file_url,
-      url: m.url
-    }));
-    
-    console.log('✅ Materiales mapeados:', mappedMaterials);
-    setMaterials(mappedMaterials);
+        // Assignment si el usuario está logueado
+        profile?.id
+          ? supabase
+              .from('assignments')
+              .select('id, status, file_url, text_answer')
+              .eq('user_id', profile.id)
+              .eq('lesson_id', slug) // Temporal, lo arreglaremos después
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null })
+      ]);
 
-      // Check if the student already submitted an assignment
-      if (profile && lessonData?.id) {
-        const { data: existing } = await supabase
+      if (lessonResult.error) throw lessonResult.error;
+      if (!lessonResult.data) throw new Error('Lección no encontrada');
+
+      const lessonData = lessonResult.data;
+
+      // Buscar materiales usando lesson_id ahora que lo tenemos
+      const { data: correctMaterials } = await supabase
+        .from('lesson_materials')
+        .select('*')
+        .eq('lesson_id', lessonData.id)
+        .order('sort_order');
+
+      // Buscar assignment correcto
+      let assignmentData = assignmentResult.data;
+      if (profile?.id && lessonData.id) {
+        const { data: correctAssignment } = await supabase
           .from('assignments')
           .select('id, status, file_url, text_answer')
           .eq('user_id', profile.id)
           .eq('lesson_id', lessonData.id)
           .limit(1)
           .maybeSingle();
-        if (existing) {
-          setAlreadySubmitted(true);
-          setDropboxLink(existing.file_url || '');
-          setTextAnswer(existing.text_answer || '');
-        } else {
-          setAlreadySubmitted(false);
-          setDropboxLink('');
-          setTextAnswer('');
-        }
+        assignmentData = correctAssignment;
       }
-      
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "No se pudo cargar la lección",
-        variant: "destructive",
-      });
-      navigate('/lecciones');
-    } finally {
-      setLoading(false);
-    }
-  };
+
+      const courseInfo = lessonData.lesson_courses?.[0]?.courses;
+      const lesson = {
+        ...lessonData,
+        course: courseInfo
+          ? {
+              title: courseInfo.title,
+              program: courseInfo.programs
+            }
+          : null
+      };
+
+      const materials = (correctMaterials || []).map(m => ({
+        id: m.id,
+        title: m.title,
+        type: m.material_type as 'file' | 'link',
+        file_url: m.file_url,
+        url: m.url
+      }));
+
+      return {
+        lesson,
+        materials,
+        assignment: assignmentData
+      };
+    },
+    enabled: !!slug,
+    staleTime: 1000 * 60 * 5, // 5 minutos
+    retry: 1,
+  });
+
+  const lesson = data?.lesson || null;
+  const materials = data?.materials || [];
+  const assignment = data?.assignment;
 
   const normalizeDropboxLink = (url: string) => {
     try {
@@ -195,7 +201,9 @@ export default function LessonDetail() {
         .upsert(payload, { onConflict: 'user_id,lesson_id' });
       if (error) throw error;
 
-      setAlreadySubmitted(true);
+      // Invalidar cache para refrescar datos
+      queryClient.invalidateQueries({ queryKey: ['lesson-detail', slug, profile.id] });
+
       toast({ title: 'Enviado', description: 'Tu trabajo fue enviado para revisión.' });
     } catch (e: any) {
       toast({ title: 'Error', description: e?.message || 'No se pudo enviar el trabajo.' , variant: 'destructive'});
@@ -204,7 +212,12 @@ export default function LessonDetail() {
     }
   };
 
-  if (loading) {
+  if (error) {
+    navigate('/lecciones');
+    return null;
+  }
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -377,7 +390,7 @@ export default function LessonDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {alreadySubmitted ? (
+              {assignment ? (
                 <div className="text-center py-8">
                   <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
                     <div className="text-4xl text-green-600">✓</div>
@@ -454,7 +467,7 @@ export default function LessonDetail() {
             setShowMaterials(open);
             if (!open) {
               // Refrescar materiales cuando se cierre el diálogo
-              fetchLessonDetails();
+              queryClient.invalidateQueries({ queryKey: ['lesson-detail', slug, profile?.id] });
             }
           }}
           lessonId={lesson.id}
