@@ -35,3 +35,17 @@ export function formatShortDate(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleDateString('es-ES');
 }
+
+/**
+ * Formatea una fecha para eventos con día corto, mes y hora
+ * @example formatEventDate('2024-01-15T10:30:00Z') => '15 ene, 10:30'
+ */
+export function formatEventDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('es-ES', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}

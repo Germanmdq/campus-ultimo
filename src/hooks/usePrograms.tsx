@@ -144,56 +144,85 @@ export function usePrograms() {
             .filter(Boolean)
         }));
 
-        // 4) Calcular progreso por curso para el usuario
-        const programsWithProgress = await Promise.all(
-          mapped.map(async (program: any) => {
-            if (program.courses?.length) {
-              const coursesWithProgress = await Promise.all(
-                program.courses.map(async (course: any) => {
-                  // Contar lecciones del curso
-                  const { count: lessonsCount } = await supabase
-                    .from('lessons')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('course_id', course.id);
-
-                  // Obtener IDs de lecciones del curso
-                  const { data: lessonIds } = await supabase
-                    .from('lessons')
-                    .select('id')
-                    .eq('course_id', course.id);
-
-                  const lessonIdsList = lessonIds?.map(l => l.id) || [];
-
-                  // Contar lecciones completadas por el usuario
-                  let completedCount = 0;
-                  if (lessonIdsList.length > 0) {
-                    const { count } = await supabase
-                      .from('lesson_progress')
-                      .select('*', { count: 'exact', head: true })
-                      .eq('user_id', user.id)
-                      .eq('completed', true)
-                      .in('lesson_id', lessonIdsList);
-
-                    completedCount = count || 0;
-                  }
-
-                  const progressPercent = lessonsCount && lessonsCount > 0
-                    ? Math.round((completedCount / lessonsCount) * 100)
-                    : 0;
-
-                  return {
-                    ...course,
-                    lessons_count: lessonsCount || 0,
-                    progress_percent: progressPercent
-                  };
-                })
-              );
-
-              return { ...program, courses: coursesWithProgress };
-            }
-            return program;
-          })
+        // 4) Calcular progreso por curso EN MEMORIA (sin N+1)
+        // Obtener todos los IDs de cursos
+        const allCourseIds = mapped.flatMap((p: any) =>
+          (p.courses || []).map((c: any) => c.id)
         );
+
+        if (allCourseIds.length === 0) {
+          setPrograms(mapped);
+          return;
+        }
+
+        // Query paralelas para obtener toda la data de una vez
+        const [lessonsResult, progressResult] = await Promise.all([
+          // Todas las lecciones de todos los cursos
+          supabase
+            .from('lessons')
+            .select('id, course_id')
+            .in('course_id', allCourseIds),
+
+          // Todo el progreso del usuario
+          supabase
+            .from('lesson_progress')
+            .select('lesson_id, completed')
+            .eq('user_id', user.id)
+            .eq('completed', true)
+        ]);
+
+        // Procesar en memoria: contar lecciones por curso
+        const lessonCountByCourse = new Map<string, number>();
+        const lessonIdsByCourse = new Map<string, Set<string>>();
+
+        (lessonsResult.data || []).forEach(lesson => {
+          lessonCountByCourse.set(
+            lesson.course_id,
+            (lessonCountByCourse.get(lesson.course_id) || 0) + 1
+          );
+
+          if (!lessonIdsByCourse.has(lesson.course_id)) {
+            lessonIdsByCourse.set(lesson.course_id, new Set());
+          }
+          lessonIdsByCourse.get(lesson.course_id)!.add(lesson.id);
+        });
+
+        // Procesar en memoria: lecciones completadas
+        const completedLessonIds = new Set(
+          (progressResult.data || []).map(p => p.lesson_id)
+        );
+
+        // Contar completadas por curso
+        const completedCountByCourse = new Map<string, number>();
+        lessonIdsByCourse.forEach((lessonIds, courseId) => {
+          let count = 0;
+          lessonIds.forEach(lessonId => {
+            if (completedLessonIds.has(lessonId)) count++;
+          });
+          completedCountByCourse.set(courseId, count);
+        });
+
+        // Aplicar progreso a los cursos
+        const programsWithProgress = mapped.map((program: any) => {
+          if (program.courses?.length) {
+            const coursesWithProgress = program.courses.map((course: any) => {
+              const lessonsCount = lessonCountByCourse.get(course.id) || 0;
+              const completedCount = completedCountByCourse.get(course.id) || 0;
+              const progressPercent = lessonsCount > 0
+                ? Math.round((completedCount / lessonsCount) * 100)
+                : 0;
+
+              return {
+                ...course,
+                lessons_count: lessonsCount,
+                progress_percent: progressPercent
+              };
+            });
+
+            return { ...program, courses: coursesWithProgress };
+          }
+          return program;
+        });
 
         setPrograms(programsWithProgress);
         return;
