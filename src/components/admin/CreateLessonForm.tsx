@@ -189,10 +189,10 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
 
       // 2. Crear las relaciones en lesson_courses (many-to-many)
       console.log('🔥 Cursos seleccionados:', selectedCourses);
-      const lessonCourseInserts = selectedCourses.map((courseId, index) => ({
+      const lessonCourseInserts = selectedCourses.map((courseId) => ({
         lesson_id: data.id,
-        course_id: courseId,
-        sort_order: index
+        course_id: courseId
+        // sort_order se agregará cuando se aplique la migración
       }));
 
       console.log('🔥 Creando relaciones lesson_courses:', lessonCourseInserts);

@@ -40,6 +40,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { sendSupportEmail } from "@/lib/email";
+import { Loader2 } from "lucide-react";
 
 const getNavigationItems = (role: string) => {
   const baseItems: { title: string, url: string, icon: any, badge?: string }[] = [];
@@ -77,6 +80,7 @@ export function AppSidebar() {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const currentPath = location.pathname;
+  const { toast } = useToast();
 
   const navigationItems = getNavigationItems(profile?.role || 'student');
 
@@ -101,6 +105,7 @@ export function AppSidebar() {
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportEmail, setSupportEmail] = useState("");
   const [supportMessage, setSupportMessage] = useState("");
+  const [sendingSupport, setSendingSupport] = useState(false);
 
   const getRoleLabel = (role?: string) => {
     switch ((role || '').toLowerCase()) {
@@ -134,11 +139,33 @@ export function AppSidebar() {
     }
   };
 
-  const handleSupportSubmit = (e: React.FormEvent) => {
+  const handleSupportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const mailto = `mailto:soporte@espaciodegeometriasagrada.com?subject=${encodeURIComponent('Consulta de soporte')}&body=${encodeURIComponent(`De: ${supportEmail}\n\n${supportMessage}`)}`;
-    window.location.href = mailto;
-    setSupportOpen(false);
+    setSendingSupport(true);
+
+    try {
+      await sendSupportEmail({
+        from: supportEmail,
+        message: supportMessage
+      });
+
+      toast({
+        title: "Consulta enviada",
+        description: "Te responderemos a la brevedad por email",
+      });
+
+      setSupportOpen(false);
+      setSupportEmail("");
+      setSupportMessage("");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo enviar la consulta. Intenta nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingSupport(false);
+    }
   };
 
   return (
@@ -293,10 +320,19 @@ export function AppSidebar() {
                 />
               </div>
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setSupportOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setSupportOpen(false)} disabled={sendingSupport}>
                   Cancelar
                 </Button>
-                <Button type="submit">Enviar</Button>
+                <Button type="submit" disabled={sendingSupport}>
+                  {sendingSupport ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    'Enviar'
+                  )}
+                </Button>
               </div>
             </form>
           </DialogContent>
