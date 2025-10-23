@@ -188,18 +188,32 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
       if (!data?.id) throw new Error("No se pudo obtener el ID de la lección creada.");
 
       // 2. Crear las relaciones en lesson_courses (many-to-many)
+      console.log('🔥 Cursos seleccionados:', selectedCourses);
       const lessonCourseInserts = selectedCourses.map((courseId, index) => ({
         lesson_id: data.id,
         course_id: courseId,
         sort_order: index
       }));
 
-      const { error: relationError } = await supabase
-        .from('lesson_courses')
-        .insert(lessonCourseInserts);
+      console.log('🔥 Creando relaciones lesson_courses:', lessonCourseInserts);
 
-      if (relationError) throw relationError;
-      console.log('🔥 Relaciones creadas exitosamente');
+      const { data: insertedRelations, error: relationError } = await supabase
+        .from('lesson_courses')
+        .insert(lessonCourseInserts)
+        .select('*');
+
+      if (relationError) {
+        console.error('🔥 ERROR creando relaciones:', relationError);
+        throw relationError;
+      }
+
+      console.log('🔥 Relaciones creadas exitosamente:', insertedRelations);
+      console.log(`🔥 Total de relaciones creadas: ${insertedRelations?.length} de ${selectedCourses.length} cursos`);
+
+      // Verificar que se crearon todas las relaciones
+      if (insertedRelations?.length !== selectedCourses.length) {
+        console.warn(`⚠️ ADVERTENCIA: Se esperaban ${selectedCourses.length} relaciones pero se crearon ${insertedRelations?.length}`);
+      }
 
       toast({
         title: "Lección creada",
