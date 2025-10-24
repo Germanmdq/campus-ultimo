@@ -94,7 +94,7 @@ export default function CourseViewer() {
       // PASO 2: Obtener las relaciones lesson_courses para este curso
       const { data: lessonCourses, error: lcError } = await supabase
         .from('lesson_courses')
-        .select('lesson_id, lessons (*)')
+        .select('lesson_id')
         .eq('course_id', course.id);
 
       if (lcError) {
@@ -105,11 +105,17 @@ export default function CourseViewer() {
       console.log('🔍 lesson_courses found:', lessonCourses?.length || 0);
       console.log('🔍 lesson_courses data:', lessonCourses);
 
-      // PASO 3: Extraer las lecciones
-      const lessonsData = (lessonCourses || [])
-        .map((lc: any) => lc.lessons)
-        .filter(Boolean)
-        .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
+      const lessonIds = (lessonCourses || []).map(lc => lc.lesson_id);
+      console.log('🔍 lesson IDs:', lessonIds);
+
+      // PASO 3: Obtener las lecciones directamente por IDs
+      const lessonsData = lessonIds.length > 0
+        ? (await supabase
+            .from('lessons')
+            .select('*')
+            .in('id', lessonIds)
+            .order('sort_order')).data || []
+        : [];
 
       console.log('🔍 Total lessons extracted:', lessonsData.length);
       console.log('🔍 Lessons:', lessonsData.map((l: any) => ({ id: l.id, title: l.title })));
@@ -123,7 +129,6 @@ export default function CourseViewer() {
         : [];
 
       // PASO 5: Obtener todos los materiales de todas las lecciones EN PARALELO
-      const lessonIds = lessonsData.map((l: any) => l.id);
       const { data: allMaterials } = lessonIds.length > 0
         ? await supabase
             .from('lesson_materials')
