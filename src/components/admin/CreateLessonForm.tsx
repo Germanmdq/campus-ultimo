@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { LessonMaterialsDialog } from './LessonMaterialsDialog';
 import ReactMarkdown from 'react-markdown';
-import { useQueryClient } from '@tanstack/react-query';
 
 interface CreateLessonFormProps {
   open?: boolean;
@@ -33,7 +32,6 @@ interface Lesson {
 }
 
 export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: CreateLessonFormProps) {
-  const queryClient = useQueryClient();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [slug, setSlug] = useState('');
@@ -217,13 +215,9 @@ export function CreateLessonForm({ open, onOpenChange, onSuccess, inline }: Crea
         console.warn(`⚠️ ADVERTENCIA: Se esperaban ${selectedCourses.length} relaciones pero se crearon ${insertedRelations?.length}`);
       }
 
-      // ✅ INVALIDAR CACHE de React Query para que CourseViewer refresque
-      console.log('🔥 Invalidando cache de course-viewer...');
-      queryClient.invalidateQueries({ queryKey: ['course-viewer'] });
-
       toast({
         title: "Lección creada",
-        description: `La lección "${title}" ha sido creada exitosamente`,
+        description: `La lección "${title}" ha sido creada exitosamente en ${selectedCourses.length} curso(s)`,
       });
 
       // Si tiene materiales, abrir el diálogo para cargarlos

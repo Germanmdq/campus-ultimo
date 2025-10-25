@@ -21,6 +21,7 @@ interface Lesson {
   requires_admin_approval: boolean;
   has_materials: boolean;
   course_id: string;
+  courses: Array<{ id: string; title: string }>; // TODOS los cursos donde está la lección
 }
 
 interface GroupedLesson {
@@ -80,6 +81,13 @@ export default function Lecciones() {
         const courseId = firstCourse?.id || 'sin-curso';
         const courseTitle = firstCourse?.title || 'Sin curso asignado';
         const programTitle = firstCourse?.programs?.title || 'Sin programa';
+
+        // Obtener TODOS los cursos donde está la lección
+        const allCourses = (l.lesson_courses || []).map((lc: any) => ({
+          id: lc.courses?.id,
+          title: lc.courses?.title
+        })).filter((c: any) => c.id && c.title);
+
         const lesson: Lesson = {
           id: l.id,
           title: l.title,
@@ -90,6 +98,7 @@ export default function Lecciones() {
           requires_admin_approval: l.requires_admin_approval,
           has_materials: l.has_materials,
           course_id: l.course_id,
+          courses: allCourses
         };
         let group = grouped.find(g => g.courseId === courseId);
         if (!group) {
@@ -244,6 +253,17 @@ export default function Lecciones() {
                               <p className="text-sm text-muted-foreground mb-2">
                                 {lesson.description || 'Lección de geometría sagrada'}
                               </p>
+                              {/* Mostrar TODOS los cursos donde está la lección */}
+                              {lesson.courses && lesson.courses.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                  <span className="text-xs text-muted-foreground">Cursos:</span>
+                                  {lesson.courses.map((course) => (
+                                    <Badge key={course.id} variant="outline" className="text-xs">
+                                      {course.title}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
                               <div className="flex items-center gap-4 mb-3">
                                 <Badge>Publicado</Badge>
                                 {lesson.requires_admin_approval && (

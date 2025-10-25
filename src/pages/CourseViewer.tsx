@@ -73,28 +73,46 @@ export default function CourseViewer() {
     }
   };
 
-  // Query optimizada con React Query
+  // Query optimizada con React Query - Approach directo desde lesson_courses
   const { data: courseData, isLoading, error } = useQuery({
     queryKey: ['course-viewer', courseId, profile?.id],
     queryFn: async () => {
       if (!courseId) throw new Error('No course ID provided');
 
-      // PASO 1: Obtener el curso
+      console.log('🔍 Fetching course with slug:', courseId);
+
+      // PASO 1: Obtener el curso básico
       const { data: course, error: courseError } = await supabase
         .from('courses')
         .select('id, title, summary')
         .eq('slug', courseId)
         .single();
 
-      if (courseError) throw courseError;
+      if (courseError) {
+        console.error('🔍 ERROR fetching course:', courseError);
+        throw courseError;
+      }
       if (!course) throw new Error('Course not found');
 
       console.log('🔍 Course found:', course);
 
-      // PASO 2: Obtener las relaciones lesson_courses para este curso
-      const { data: lessonCourses, error: lcError } = await supabase
+      // PASO 2: Query directo desde lesson_courses con join a lessons
+      const { data: lessonCoursesData, error: lcError } = await supabase
         .from('lesson_courses')
-        .select('lesson_id')
+        .select(`
+          lessons (
+            id,
+            title,
+            description,
+            slug,
+            video_url,
+            duration_minutes,
+            sort_order,
+            has_assignment,
+            requires_admin_approval,
+            approval_form_url
+          )
+        `)
         .eq('course_id', course.id);
 
       if (lcError) {
@@ -102,33 +120,29 @@ export default function CourseViewer() {
         throw lcError;
       }
 
-      console.log('🔍 lesson_courses found:', lessonCourses?.length || 0);
-      console.log('🔍 lesson_courses data:', lessonCourses);
+      console.log('🔍 lesson_courses data:', lessonCoursesData);
 
-      const lessonIds = (lessonCourses || []).map(lc => lc.lesson_id);
-      console.log('🔍 lesson IDs:', lessonIds);
-
-      // PASO 3: Obtener las lecciones directamente por IDs
-      const lessonsData = lessonIds.length > 0
-        ? (await supabase
-            .from('lessons')
-            .select('*')
-            .in('id', lessonIds)
-            .order('sort_order')).data || []
-        : [];
+      // Extraer lecciones y ordenar
+      const lessonsData = (lessonCoursesData || [])
+        .map((lc: any) => lc.lessons)
+        .filter((l: any) => l) // Filtrar nulls
+        .sort((a: any, b: any) => a.sort_order - b.sort_order);
 
       console.log('🔍 Total lessons extracted:', lessonsData.length);
       console.log('🔍 Lessons:', lessonsData.map((l: any) => ({ id: l.id, title: l.title })));
 
-      // PASO 4: Obtener progreso del usuario
-      const progressData = profile?.id
+      const lessonIds = lessonsData.map((l: any) => l.id);
+
+      // PASO 3: Obtener progreso del usuario
+      const progressData = profile?.id && lessonIds.length > 0
         ? (await supabase
             .from('lesson_progress')
             .select('lesson_id, completed')
-            .eq('user_id', profile.id)).data || []
+            .eq('user_id', profile.id)
+            .in('lesson_id', lessonIds)).data || []
         : [];
 
-      // PASO 5: Obtener todos los materiales de todas las lecciones EN PARALELO
+      // PASO 4: Obtener materiales de todas las lecciones
       const { data: allMaterials } = lessonIds.length > 0
         ? await supabase
             .from('lesson_materials')
@@ -146,7 +160,7 @@ export default function CourseViewer() {
         materialsByLesson.get(m.lesson_id)!.push(m);
       });
 
-      // Combinar lecciones con progreso
+      // PASO 5: Combinar lecciones con progreso
       const lessonsWithProgress = lessonsData.map((lesson: any, index: number) => {
         const progress = progressData.find((p: any) => p.lesson_id === lesson.id);
         const completed = progress?.completed || false;
@@ -172,7 +186,9 @@ export default function CourseViewer() {
       });
 
       return {
-        ...course,
+        id: course.id,
+        title: course.title,
+        summary: course.summary,
         lessons: lessonsWithProgress
       };
     },
