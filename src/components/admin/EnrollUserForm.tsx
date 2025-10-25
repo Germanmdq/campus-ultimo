@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -29,7 +28,6 @@ interface User {
 }
 
 export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserFormProps) {
-  const [userEmail, setUserEmail] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [programId, setProgramId] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -43,35 +41,54 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
   useEffect(() => {
     if (open) {
       fetchPrograms();
-      fetchUsers();
+      fetchAllUsers();
     }
   }, [open]);
 
-  // Buscar usuarios cuando cambia la query
   useEffect(() => {
-    if (searchQuery.length > 2) {
+    if (searchQuery.length >= 2) {
       searchUsers();
-    } else {
-      setUsers([]);
+    } else if (searchQuery.length === 0) {
+      fetchAllUsers();
     }
   }, [searchQuery]);
 
   const fetchPrograms = async () => {
-    const { data } = await supabase
-      .from('programs')
-      .select('id, title')
-      .not('published_at', 'is', null)
-      .order('title');
-    
-    setPrograms(data || []);
+    try {
+      const { data, error } = await supabase
+        .from('programs')
+        .select('id, title')
+        .not('published_at', 'is', null)
+        .order('title');
+      
+      if (error) throw error;
+      setPrograms(data || []);
+    } catch (error) {
+      console.error('Error fetching programs:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los programas",
+        variant: "destructive",
+      });
+    }
   };
 
-  const fetchUsers = async () => {
+  const fetchAllUsers = async () => {
+    setSearchingUsers(true);
     try {
-      const { data } = await supabase.rpc('get_users_with_emails');
+      const { data, error } = await supabase.rpc('get_users_with_emails');
+      
+      if (error) throw error;
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los usuarios",
+        variant: "destructive",
+      });
+    } finally {
+      setSearchingUsers(false);
     }
   };
 
@@ -80,11 +97,15 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
     
     setSearchingUsers(true);
     try {
-      const { data } = await supabase.rpc('get_users_with_emails');
+      const { data, error } = await supabase.rpc('get_users_with_emails');
+      
+      if (error) throw error;
+      
       const filteredUsers = data?.filter(user => 
         user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
       ) || [];
+      
       setUsers(filteredUsers);
     } catch (error) {
       console.error('Error searching users:', error);
@@ -107,10 +128,28 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
 
     setLoading(true);
     try {
-      // Upsert para evitar duplicados si existe una única por (user_id, program_id)
+      // Verificar si ya existe
+      const { data: existing } = await supabase
+        .from('enrollments')
+        .select('id')
+        .eq('user_id', selectedUser.id)
+        .eq('program_id', programId)
+        .maybeSingle();
+
+      if (existing) {
+        toast({
+          title: "Usuario ya inscrito",
+          description: `${selectedUser.full_name} ya está inscrito en este programa`,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Crear inscripción
       const { error } = await supabase
         .from('enrollments')
-        .upsert({
+        .insert({
           user_id: selectedUser.id,
           program_id: programId,
           status: 'active'
@@ -119,18 +158,18 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
       if (error) throw error;
 
       toast({
-        title: "Usuario inscrito",
-        description: `${selectedUser.full_name} ha sido inscrito exitosamente`,
+        title: "✅ Usuario inscrito",
+        description: `${selectedUser.full_name} inscrito exitosamente`,
       });
 
-      // Reset form
-      setUserEmail('');
+      // Reset
       setSelectedUser(null);
       setProgramId('');
       setSearchQuery('');
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
+      console.error('Error enrolling user:', error);
       toast({
         title: "Error",
         description: error.message || "No se pudo inscribir al usuario",
@@ -156,32 +195,31 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
                   <Button
                     variant="outline"
                     role="combobox"
-                    aria-expanded={openUserSelect}
                     className="w-full justify-between"
                     disabled={loading}
                   >
                     {selectedUser
                       ? `${selectedUser.full_name} (${selectedUser.email})`
-                      : "Buscar usuario por nombre o email..."
+                      : "Buscar usuario..."
                     }
-                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    <Search className="ml-2 h-4 w-4 shrink-0" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-full p-0">
                   <Command>
                     <CommandInput
-                      placeholder="Escribe para buscar..."
+                      placeholder="Busca por nombre o email..."
                       value={searchQuery}
                       onValueChange={setSearchQuery}
                     />
                     <CommandEmpty>
                       {searchingUsers ? (
                         <div className="flex items-center justify-center py-4">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="ml-2">Buscando...</span>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Buscando...
                         </div>
                       ) : (
-                        "No se encontraron usuarios."
+                        "No se encontraron usuarios"
                       )}
                     </CommandEmpty>
                     <CommandGroup>
@@ -191,7 +229,6 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
                           value={`${user.full_name} ${user.email}`}
                           onSelect={() => {
                             setSelectedUser(user);
-                            setUserEmail(user.email);
                             setOpenUserSelect(false);
                           }}
                         >
@@ -214,7 +251,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
             </div>
 
             <div>
-              <Label htmlFor="program">Programa</Label>
+              <Label>Programa</Label>
               <Select value={programId} onValueChange={setProgramId} disabled={loading}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar programa" />
@@ -231,7 +268,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
           </div>
 
           <div className="flex gap-2 pt-4">
-            <Button type="submit" disabled={loading} className="flex-1">
+            <Button type="submit" disabled={loading || !selectedUser || !programId} className="flex-1">
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
