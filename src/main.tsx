@@ -7,15 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // Configurar interceptor global de errores de autenticación
 setupAuthErrorInterceptor();
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 2, // 2 minutos (más corto)
-      retry: 1,
-      refetchOnWindowFocus: false, // No refetch al cambiar ventana
-    },
-  },
-});
+const queryClient = new QueryClient();
 
 const rootElement = document.getElementById('root')!;
 if (!rootElement.innerHTML) {
