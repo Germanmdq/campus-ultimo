@@ -128,31 +128,15 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
 
     setLoading(true);
     try {
-      // Verificar si ya existe
-      const { data: existing } = await supabase
-        .from('enrollments')
-        .select('id')
-        .eq('user_id', selectedUser.id)
-        .eq('program_id', programId)
-        .maybeSingle();
-
-      if (existing) {
-        toast({
-          title: "Usuario ya inscrito",
-          description: `${selectedUser.full_name} ya está inscrito en este programa`,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Crear inscripción
+      // Upsert directo - si existe lo reactiva, si no lo crea
       const { error } = await supabase
         .from('enrollments')
-        .insert({
+        .upsert({
           user_id: selectedUser.id,
           program_id: programId,
           status: 'active'
+        }, {
+          onConflict: 'user_id,program_id'
         });
 
       if (error) throw error;
@@ -162,7 +146,6 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
         description: `${selectedUser.full_name} inscrito exitosamente`,
       });
 
-      // Reset
       setSelectedUser(null);
       setProgramId('');
       setSearchQuery('');
