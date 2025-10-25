@@ -28,6 +28,8 @@ interface User {
 }
 
 export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserFormProps) {
+  console.log('🚀 EnrollUserForm montado'); // <-- AQUÍ dentro de la función
+
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [programId, setProgramId] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
