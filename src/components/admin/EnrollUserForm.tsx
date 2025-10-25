@@ -28,8 +28,6 @@ interface User {
 }
 
 export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserFormProps) {
-  console.log('🚀 EnrollUserForm montado'); // <-- AQUÍ dentro de la función
-
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [programId, setProgramId] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -66,28 +64,19 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
 
       if (error) throw error;
 
-      console.log('📚 Total de programas:', data?.length);
       setPrograms(data || []);
 
       if (userId) {
         // Obtener programas donde ya está inscrito
-        const { data: enrollments, error: enrollError } = await supabase
+        const { data: enrollments } = await supabase
           .from('enrollments')
           .select('program_id')
           .eq('user_id', userId);
 
-        if (enrollError) {
-          console.error('Error obteniendo enrollments:', enrollError);
-        }
-
-        console.log('📋 Enrollments encontrados:', enrollments);
-
         const enrolledProgramIds = enrollments?.map(e => e.program_id) || [];
-        console.log('🔒 IDs de programas donde YA está inscrito:', enrolledProgramIds);
 
         // Filtrar solo programas donde NO está inscrito
         const available = data?.filter(p => !enrolledProgramIds.includes(p.id)) || [];
-        console.log('✅ Programas DISPONIBLES para inscribir:', available.length, available);
 
         setAvailablePrograms(available);
       } else {
@@ -145,11 +134,10 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
   };
 
   const handleUserSelect = (user: User) => {
-    console.log('👤 Usuario seleccionado:', user);
     setSelectedUser(user);
     setProgramId(''); // Reset programa seleccionado
     setAvailablePrograms([]); // Limpiar programas disponibles mientras carga
-    fetchPrograms(user.id); // Cargar solo programas disponibles
+    fetchPrograms(user.id); // Cargar solo programas disponibles para este usuario
     setOpenUserSelect(false);
   };
 
@@ -169,7 +157,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
     try {
       const { error } = await supabase
         .from('enrollments')
-        .insert({
+        .upsert({
           user_id: selectedUser.id,
           program_id: programId,
           status: 'active'
