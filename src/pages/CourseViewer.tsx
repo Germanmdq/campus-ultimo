@@ -73,7 +73,7 @@ export default function CourseViewer() {
     }
   };
 
-  // Query optimizada con React Query - Usando nested query como en Lecciones.tsx
+  // Query optimizada con React Query - Approach directo desde lesson_courses
   const { data: courseData, isLoading, error } = useQuery({
     queryKey: ['course-viewer', courseId, profile?.id],
     queryFn: async () => {
@@ -81,28 +81,10 @@ export default function CourseViewer() {
 
       console.log('🔍 Fetching course with slug:', courseId);
 
-      // Query con relaciones anidadas (mismo patrón que funciona en Lecciones.tsx)
+      // PASO 1: Obtener el curso básico
       const { data: course, error: courseError } = await supabase
         .from('courses')
-        .select(`
-          id,
-          title,
-          summary,
-          lesson_courses (
-            lessons (
-              id,
-              title,
-              description,
-              slug,
-              video_url,
-              duration_minutes,
-              sort_order,
-              has_assignment,
-              requires_admin_approval,
-              approval_form_url
-            )
-          )
-        `)
+        .select('id, title, summary')
         .eq('slug', courseId)
         .single();
 
@@ -113,10 +95,35 @@ export default function CourseViewer() {
       if (!course) throw new Error('Course not found');
 
       console.log('🔍 Course found:', course);
-      console.log('🔍 lesson_courses relations:', course.lesson_courses);
 
-      // Extraer lecciones del nested query
-      const lessonsData = (course.lesson_courses || [])
+      // PASO 2: Query directo desde lesson_courses con join a lessons
+      const { data: lessonCoursesData, error: lcError } = await supabase
+        .from('lesson_courses')
+        .select(`
+          lessons (
+            id,
+            title,
+            description,
+            slug,
+            video_url,
+            duration_minutes,
+            sort_order,
+            has_assignment,
+            requires_admin_approval,
+            approval_form_url
+          )
+        `)
+        .eq('course_id', course.id);
+
+      if (lcError) {
+        console.error('🔍 ERROR fetching lesson_courses:', lcError);
+        throw lcError;
+      }
+
+      console.log('🔍 lesson_courses data:', lessonCoursesData);
+
+      // Extraer lecciones y ordenar
+      const lessonsData = (lessonCoursesData || [])
         .map((lc: any) => lc.lessons)
         .filter((l: any) => l) // Filtrar nulls
         .sort((a: any, b: any) => a.sort_order - b.sort_order);
@@ -126,7 +133,7 @@ export default function CourseViewer() {
 
       const lessonIds = lessonsData.map((l: any) => l.id);
 
-      // Obtener progreso del usuario
+      // PASO 3: Obtener progreso del usuario
       const progressData = profile?.id && lessonIds.length > 0
         ? (await supabase
             .from('lesson_progress')
@@ -135,7 +142,7 @@ export default function CourseViewer() {
             .in('lesson_id', lessonIds)).data || []
         : [];
 
-      // Obtener materiales de todas las lecciones
+      // PASO 4: Obtener materiales de todas las lecciones
       const { data: allMaterials } = lessonIds.length > 0
         ? await supabase
             .from('lesson_materials')
@@ -153,7 +160,7 @@ export default function CourseViewer() {
         materialsByLesson.get(m.lesson_id)!.push(m);
       });
 
-      // Combinar lecciones con progreso
+      // PASO 5: Combinar lecciones con progreso
       const lessonsWithProgress = lessonsData.map((lesson: any, index: number) => {
         const progress = progressData.find((p: any) => p.lesson_id === lesson.id);
         const completed = progress?.completed || false;
