@@ -28,60 +28,56 @@ interface User {
 }
 
 export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserFormProps) {
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [programId, setProgramId] = useState('');
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [availablePrograms, setAvailablePrograms] = useState<Program[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [searchingUsers, setSearchingUsers] = useState(false);
-  const [openUserSelect, setOpenUserSelect] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null); // El usuario que se ha seleccionado
+  const [programId, setProgramId] = useState(''); // El ID del programa seleccionado
+  const [availablePrograms, setAvailablePrograms] = useState<Program[]>([]); // Programas disponibles para el usuario seleccionado
+  const [allUsers, setAllUsers] = useState<User[]>([]); // Lista maestra de todos los usuarios
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]); // Usuarios mostrados en el buscador
+  const [searchQuery, setSearchQuery] = useState(''); // Término de búsqueda para usuarios
+  const [loading, setLoading] = useState(false); // Estado para el envío del formulario
+  const [dataLoading, setDataLoading] = useState(true); // Estado para la carga inicial de datos
+  const [openUserSelect, setOpenUserSelect] = useState(false); // Controla si el popover de usuarios está abierto
   const { toast } = useToast();
+
+  // Función para resetear el estado del formulario
+  const resetFormState = () => {
+    setSelectedUser(null);
+    setProgramId('');
+    setSearchQuery('');
+    setAvailablePrograms([]);
+    setFilteredUsers(allUsers);
+  };
 
   useEffect(() => {
     if (open) {
-      fetchPrograms();
-      fetchAllUsers();
+      setDataLoading(true);
+      Promise.all([fetchPrograms(), fetchAllUsers()]).finally(() => setDataLoading(false));
+    } else {
+      resetFormState(); // Limpia el estado cuando el diálogo se cierra
     }
   }, [open]);
 
   useEffect(() => {
     if (searchQuery.length >= 2) {
-      searchUsers();
-    } else if (searchQuery.length === 0) {
-      fetchAllUsers();
+      const filtered = allUsers.filter(user => 
+        user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredUsers(filtered);
+    } else {
+      setFilteredUsers(allUsers);
     }
-  }, [searchQuery]);
+  }, [searchQuery, allUsers]);
 
-  const fetchPrograms = async (userId?: string) => {
+  const fetchPrograms = async () => {
     try {
       const { data, error } = await supabase
         .from('programs')
         .select('id, title')
         .not('published_at', 'is', null)
         .order('title');
-
       if (error) throw error;
-
-      setPrograms(data || []);
-
-      if (userId && data) {
-        // Obtener programas donde ya está inscrito
-        const { data: enrollments } = await supabase
-          .from('enrollments')
-          .select('program_id')
-          .eq('user_id', userId);
-
-        const enrolledProgramIds = new Set(enrollments?.map(e => e.program_id) || []);
-
-        // Filtrar solo programas donde NO está inscrito
-        const available = data.filter(p => !enrolledProgramIds.has(p.id));
-
-        setAvailablePrograms(available);
-      } else {
-        setAvailablePrograms(data || []);
-      }
+      setAllPrograms(data || []);
     } catch (error) {
       console.error('Error fetching programs:', error);
       toast({
@@ -93,12 +89,12 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
   };
 
   const fetchAllUsers = async () => {
-    setSearchingUsers(true);
     try {
       const { data, error } = await supabase.rpc('get_users_with_emails');
-      
       if (error) throw error;
-      setUsers(data || []);
+      const users = data || [];
+      setAllUsers(users);
+      setFilteredUsers(users);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({
@@ -106,39 +102,24 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
         description: "No se pudieron cargar los usuarios",
         variant: "destructive",
       });
-    } finally {
-      setSearchingUsers(false);
     }
   };
 
-  const searchUsers = async () => {
-    if (!searchQuery.trim()) return;
-    
-    setSearchingUsers(true);
-    try {
-      const { data, error } = await supabase.rpc('get_users_with_emails');
-      
-      if (error) throw error;
-      
-      const filteredUsers = data?.filter(user => 
-        user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      ) || [];
-      
-      setUsers(filteredUsers);
-    } catch (error) {
-      console.error('Error searching users:', error);
-    } finally {
-      setSearchingUsers(false);
-    }
-  };
-
-  const handleUserSelect = (user: User) => {
+  const handleUserSelect = async (user: User) => {
     setSelectedUser(user);
-    setProgramId(''); // Reset programa seleccionado
-    setAvailablePrograms([]); // Limpiar programas disponibles mientras carga
-    fetchPrograms(user.id); // Cargar solo programas disponibles para este usuario
+    setProgramId('');
+    setAvailablePrograms([]);
     setOpenUserSelect(false);
+    setSearchQuery(''); // Limpiar búsqueda
+
+    // Filtrar programas para este usuario específico
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('program_id')
+      .eq('user_id', user.id);
+    const enrolledProgramIds = new Set(enrollments?.map(e => e.program_id) || []);
+    const available = allPrograms.filter(p => !enrolledProgramIds.has(p.id));
+    setAvailablePrograms(available);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -170,11 +151,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
         description: `${selectedUser.full_name} inscrito exitosamente`,
       });
 
-      // Reset form
-      setSelectedUser(null);
-      setProgramId('');
-      setSearchQuery('');
-      setAvailablePrograms([]);
+      resetFormState();
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
@@ -205,7 +182,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
                     variant="outline"
                     role="combobox"
                     className="w-full justify-between"
-                    disabled={loading}
+                    disabled={loading || dataLoading}
                   >
                     {selectedUser
                       ? `${selectedUser.full_name} (${selectedUser.email})`
@@ -222,17 +199,17 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
                       onValueChange={setSearchQuery}
                     />
                     <CommandEmpty>
-                      {searchingUsers ? (
+                      {dataLoading ? (
                         <div className="flex items-center justify-center py-4">
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          Buscando...
+                          Cargando...
                         </div>
                       ) : (
                         "No se encontraron usuarios"
                       )}
                     </CommandEmpty>
                     <CommandGroup>
-                      {users.slice(0, 10).map((user) => (
+                      {filteredUsers.slice(0, 10).map((user) => (
                         <CommandItem
                           key={user.id}
                           value={`${user.full_name} ${user.email}`}
@@ -261,7 +238,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
               <Select 
                 value={programId} 
                 onValueChange={setProgramId} 
-                disabled={loading || !selectedUser}
+                disabled={loading || dataLoading || !selectedUser}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={
