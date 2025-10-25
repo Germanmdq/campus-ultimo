@@ -61,22 +61,32 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
         .select('id, title')
         .not('published_at', 'is', null)
         .order('title');
-      
+
       if (error) throw error;
-      
+
+      console.log('📚 Total de programas:', data?.length);
       setPrograms(data || []);
-      
+
       if (userId) {
         // Obtener programas donde ya está inscrito
-        const { data: enrollments } = await supabase
+        const { data: enrollments, error: enrollError } = await supabase
           .from('enrollments')
           .select('program_id')
           .eq('user_id', userId);
-        
+
+        if (enrollError) {
+          console.error('Error obteniendo enrollments:', enrollError);
+        }
+
+        console.log('📋 Enrollments encontrados:', enrollments);
+
         const enrolledProgramIds = enrollments?.map(e => e.program_id) || [];
-        
+        console.log('🔒 IDs de programas donde YA está inscrito:', enrolledProgramIds);
+
         // Filtrar solo programas donde NO está inscrito
         const available = data?.filter(p => !enrolledProgramIds.includes(p.id)) || [];
+        console.log('✅ Programas DISPONIBLES para inscribir:', available.length, available);
+
         setAvailablePrograms(available);
       } else {
         setAvailablePrograms(data || []);
@@ -84,9 +94,9 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
     } catch (error) {
       console.error('Error fetching programs:', error);
       toast({
-        title: "Error",
-        description: "No se pudieron cargar los programas",
-        variant: "destructive",
+        title: 'Error',
+        description: 'No se pudieron cargar los programas',
+        variant: 'destructive',
       });
     }
   };
@@ -133,8 +143,10 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
   };
 
   const handleUserSelect = (user: User) => {
+    console.log('👤 Usuario seleccionado:', user);
     setSelectedUser(user);
     setProgramId(''); // Reset programa seleccionado
+    setAvailablePrograms([]); // Limpiar programas disponibles mientras carga
     fetchPrograms(user.id); // Cargar solo programas disponibles
     setOpenUserSelect(false);
   };
