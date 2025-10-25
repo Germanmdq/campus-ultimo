@@ -10,10 +10,9 @@ setupAuthErrorInterceptor();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutos
-      retry: 1, // Solo 1 reintento
+      staleTime: 1000 * 60 * 2, // 2 minutos (más corto)
+      retry: 1,
       refetchOnWindowFocus: false, // No refetch al cambiar ventana
-      refetchOnReconnect: false, // No refetch al reconectar
     },
   },
 });
