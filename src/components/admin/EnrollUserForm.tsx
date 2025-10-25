@@ -66,17 +66,17 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
 
       setPrograms(data || []);
 
-      if (userId) {
+      if (userId && data) {
         // Obtener programas donde ya está inscrito
         const { data: enrollments } = await supabase
           .from('enrollments')
           .select('program_id')
           .eq('user_id', userId);
 
-        const enrolledProgramIds = enrollments?.map(e => e.program_id) || [];
+        const enrolledProgramIds = new Set(enrollments?.map(e => e.program_id) || []);
 
         // Filtrar solo programas donde NO está inscrito
-        const available = data?.filter(p => !enrolledProgramIds.includes(p.id)) || [];
+        const available = data.filter(p => !enrolledProgramIds.has(p.id));
 
         setAvailablePrograms(available);
       } else {
@@ -157,7 +157,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
     try {
       const { error } = await supabase
         .from('enrollments')
-        .upsert({
+        .insert({
           user_id: selectedUser.id,
           program_id: programId,
           status: 'active'
