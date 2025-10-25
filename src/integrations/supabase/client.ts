@@ -5,13 +5,58 @@ import type { Database } from './types';
 const SUPABASE_URL = "https://epqalebkqmkddlfomnyf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwcWFsZWJrcW1rZGRsZm9tbnlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5ODY2NzksImV4cCI6MjA3MjU2MjY3OX0.ER4376BoXZfLvFu4ERbPmNs1O16mhyqjj9E06ZBvTg0";
 
+// Limpiar tokens expirados al inicializar
+const cleanupExpiredTokens = () => {
+  try {
+    const authToken = localStorage.getItem('sb-epqalebkqmkddlfomnyf-auth-token');
+    if (authToken) {
+      const parsed = JSON.parse(authToken);
+      const expiresAt = parsed?.expires_at;
+      
+      if (expiresAt && new Date(expiresAt * 1000) < new Date()) {
+        console.log('🧹 Token expirado encontrado - limpiando localStorage');
+        localStorage.removeItem('sb-epqalebkqmkddlfomnyf-auth-token');
+      }
+    }
+  } catch (error) {
+    console.error('Error al verificar tokens:', error);
+  }
+};
+
+// Ejecutar limpieza antes de crear el cliente
+cleanupExpiredTokens();
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
-
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'campus-ultimo',
+    },
+  },
+});
+
+// Listener para eventos de autenticación
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('🔔 Auth event:', event);
+  
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('✅ Token renovado exitosamente');
+  }
+  
+  if (event === 'SIGNED_OUT') {
+    console.log('👋 Usuario cerró sesión');
+  }
+  
+  if (event === 'USER_DELETED') {
+    console.log('🗑️ Usuario eliminado');
+    localStorage.clear();
   }
 });

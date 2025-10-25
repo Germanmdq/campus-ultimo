@@ -2,9 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Arreglar warnings de CSS */
+/* Arreglar warnings de CSS - Compatible con todos los navegadores */
 html {
   -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
