@@ -31,6 +31,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [programId, setProgramId] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [availablePrograms, setAvailablePrograms] = useState<Program[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,7 +54,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
     }
   }, [searchQuery]);
 
-  const fetchPrograms = async () => {
+  const fetchPrograms = async (userId?: string) => {
     try {
       const { data, error } = await supabase
         .from('programs')
@@ -62,7 +63,24 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
         .order('title');
       
       if (error) throw error;
+      
       setPrograms(data || []);
+      
+      if (userId) {
+        // Obtener programas donde ya está inscrito
+        const { data: enrollments } = await supabase
+          .from('enrollments')
+          .select('program_id')
+          .eq('user_id', userId);
+        
+        const enrolledProgramIds = enrollments?.map(e => e.program_id) || [];
+        
+        // Filtrar solo programas donde NO está inscrito
+        const available = data?.filter(p => !enrolledProgramIds.includes(p.id)) || [];
+        setAvailablePrograms(available);
+      } else {
+        setAvailablePrograms(data || []);
+      }
     } catch (error) {
       console.error('Error fetching programs:', error);
       toast({
@@ -114,6 +132,13 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
     }
   };
 
+  const handleUserSelect = (user: User) => {
+    setSelectedUser(user);
+    setProgramId(''); // Reset programa seleccionado
+    fetchPrograms(user.id); // Cargar solo programas disponibles
+    setOpenUserSelect(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -128,15 +153,12 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
 
     setLoading(true);
     try {
-      // Upsert directo - si existe lo reactiva, si no lo crea
       const { error } = await supabase
         .from('enrollments')
-        .upsert({
+        .insert({
           user_id: selectedUser.id,
           program_id: programId,
           status: 'active'
-        }, {
-          onConflict: 'user_id,program_id'
         });
 
       if (error) throw error;
@@ -146,9 +168,11 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
         description: `${selectedUser.full_name} inscrito exitosamente`,
       });
 
+      // Reset form
       setSelectedUser(null);
       setProgramId('');
       setSearchQuery('');
+      setAvailablePrograms([]);
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
@@ -185,7 +209,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
                       ? `${selectedUser.full_name} (${selectedUser.email})`
                       : "Buscar usuario..."
                     }
-                    <Search className="ml-2 h-4 w-4 shrink-0" />
+                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-full p-0">
@@ -210,10 +234,7 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
                         <CommandItem
                           key={user.id}
                           value={`${user.full_name} ${user.email}`}
-                          onSelect={() => {
-                            setSelectedUser(user);
-                            setOpenUserSelect(false);
-                          }}
+                          onSelect={() => handleUserSelect(user)}
                         >
                           <Check
                             className={cn(
@@ -235,23 +256,46 @@ export function EnrollUserForm({ open, onOpenChange, onSuccess }: EnrollUserForm
 
             <div>
               <Label>Programa</Label>
-              <Select value={programId} onValueChange={setProgramId} disabled={loading}>
+              <Select 
+                value={programId} 
+                onValueChange={setProgramId} 
+                disabled={loading || !selectedUser}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar programa" />
+                  <SelectValue placeholder={
+                    !selectedUser 
+                      ? "Primero selecciona un usuario" 
+                      : availablePrograms.length === 0
+                      ? "No hay programas disponibles"
+                      : "Seleccionar programa"
+                  } />
                 </SelectTrigger>
                 <SelectContent>
-                  {programs.map(program => (
-                    <SelectItem key={program.id} value={program.id}>
-                      {program.title}
-                    </SelectItem>
-                  ))}
+                  {availablePrograms.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      {!selectedUser 
+                        ? "Selecciona un usuario primero"
+                        : "Este usuario ya está inscrito en todos los programas"
+                      }
+                    </div>
+                  ) : (
+                    availablePrograms.map(program => (
+                      <SelectItem key={program.id} value={program.id}>
+                        {program.title}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="flex gap-2 pt-4">
-            <Button type="submit" disabled={loading || !selectedUser || !programId} className="flex-1">
+            <Button 
+              type="submit" 
+              disabled={loading || !selectedUser || !programId || availablePrograms.length === 0} 
+              className="flex-1"
+            >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
